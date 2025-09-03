@@ -56,8 +56,12 @@
 
 ### 软件截图
 
-![软件截图](./screenshot.png)
-image.png
+![主界面](./docs/screenshot-1.png)
+![暗色模式](./docs/screenshot-2.png)
+![启动状态](./docs/screenshot-3.png)
+![最小化状态](./docs/screenshot-4.png)
+![退出提示](./docs/screenshot-5.png)
+
 ### 日常使用
 
 - **启动/停止**：点击控制面板的"启动"/"停止"按钮
