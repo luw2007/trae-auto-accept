@@ -1,0 +1,27 @@
+{
+    "name": "trae-auto-accept",
+    "displayName": "Trae Auto Accept",
+    "description": "TraeCN 自动点击'接受全部'按钮",
+    "version": "1.10.0",
+    "engines": {
+        "vscode": "^1.74.0"
+    },
+    "categories": ["Other"],
+    "main": "./extension.js",
+    "author": "luw2007",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/luw2007/trae-auto-accept.git"
+    },
+    "contributes": {
+        "commands": [
+            {
+                "command": "trae-auto-accept.start",
+                "title": "启动 Trae 自动接受"
+            }
+        ]
+    },
+    "activationEvents": [
+        "onStartupFinished"
+    ]
+}
