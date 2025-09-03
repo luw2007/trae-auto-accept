@@ -11,22 +11,21 @@ This is a specialized VS Code extension designed for TraeCN that provides automa
 ### Extension Structure
 - **Single-file extension** (`extension.js`) - Contains all TraeCN-specific logic
 - **VS Code API based** - Uses official VS Code extension APIs
-- **Command-based interface** - Provides 3 TraeCN-specific commands
+- **Command-based interface** - Provides 1 TraeCN-specific command
 - **State management** - Tracks running state with 2-second interval timers
 - **Output logging** - Dedicated output channel for operation tracking
 
 ### Key Components
 
 #### Core Files
-- `extension.js` - Main extension logic with TraeCN-specific button detection
+- `extension.js` - Main extension logic with clipboard integration
+- `trae-browser-script.js` - Browser automation script with real DOM clicking
 - `package.json` - Extension manifest with TraeCN branding and commands
 - `build.sh` - Build script for packaging TraeCN extension
 - `trae-auto-accept.vsix` - Pre-built TraeCN extension package
 
 #### TraeCN Commands
-- `trae-auto-accept.start` - Starts automatic "Accept All" monitoring
-- `trae-auto-accept.stop` - Stops automatic "Accept All" monitoring  
-- `trae-auto-accept.status` - Shows current TraeCN monitoring status
+- `trae-auto-accept.start` - Copies browser script to clipboard and opens dev tools
 
 ## Development Commands
 
@@ -54,15 +53,13 @@ code --install-extension trae-auto-accept.vsix
 # Test TraeCN extension commands
 # Open VS Code command palette:
 # - 启动 Trae 自动接受
-# - 停止 Trae 自动接受  
-# - Trae 自动接受状态
 ```
 
 ## Extension Lifecycle
 
 ### Activation
 - Triggered on VS Code startup (`onStartupFinished`)
-- Registers 3 TraeCN-specific commands via `vscode.commands.registerCommand`
+- Registers 1 TraeCN-specific command via `vscode.commands.registerCommand`
 - Sets up cleanup handlers and output channel
 
 ### Runtime
@@ -110,11 +107,16 @@ The extension attempts to find TraeCN's "Accept All" button using:
 ```
 trae-auto-accept/
 ├── extension.js              # Main TraeCN extension code
+├── trae-browser-script.js    # Browser automation script
 ├── package.json              # TraeCN extension manifest
 ├── build.sh                 # TraeCN build script
 ├── trae-auto-accept.vsix    # Built TraeCN extension package
 ├── README.md                # TraeCN user documentation
-└── .vscodeignore            # Package ignore rules
+├── LICENSE                  # MIT license
+├── RELEASE.md               # GitHub release instructions
+├── CLAUDE.md                # Development guidance
+├── .vscodeignore            # Package ignore rules
+└── .gitignore               # Git ignore rules
 ```
 
 ## Development Notes
