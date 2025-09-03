@@ -8,12 +8,12 @@ This is a specialized VS Code extension designed for TraeCN that provides automa
 
 ## Architecture
 
-### Extension Structure
-- **Single-file extension** (`extension.js`) - Contains all TraeCN-specific logic
-- **VS Code API based** - Uses official VS Code extension APIs
-- **Command-based interface** - Provides 1 TraeCN-specific command
-- **State management** - Tracks running state with 2-second interval timers
-- **Output logging** - Dedicated output channel for operation tracking
+### Extension Architecture
+- **Dual-component system**: VS Code extension + browser automation script
+- **Clipboard integration**: Automatically copies browser script to clipboard
+- **Auto-devtools**: Opens/closes browser developer tools automatically
+- **State management**: Tracks running state with proper cleanup
+- **Error handling**: Comprehensive error handling and user feedback
 
 ### Key Components
 
@@ -31,12 +31,15 @@ This is a specialized VS Code extension designed for TraeCN that provides automa
 
 ### Build & Package
 ```bash
-# Package TraeCN extension into .vsix file
+# Package TraeCN extension into .vsix file (recommended)
 ./build.sh
 
-# Manual packaging
+# Manual packaging with vsce
 npm install -g @vscode/vsce
 vsce package --out trae-auto-accept.vsix
+
+# Install extension locally for testing
+code --install-extension trae-auto-accept.vsix
 ```
 
 ### Installation
@@ -63,30 +66,31 @@ code --install-extension trae-auto-accept.vsix
 - Sets up cleanup handlers and output channel
 
 ### Runtime
-- Uses `setInterval` for periodic TraeCN button checking (2-second intervals)
-- Maintains `isRunning` state flag
+- Uses `setInterval` for periodic operation monitoring (2-second intervals)
+- Maintains `isRunning` state flag to prevent multiple instances
 - Provides visual feedback via `vscode.window.showInformationMessage`
-- Logs all operations to dedicated output channel
+- Logs all operations to dedicated output channel with timestamps
+- Automatic clipboard integration and developer tools management
 
 ### Deactivation
 - Clears all intervals
 - Resets running state
 - Disposes output channel and commands
 
-## TraeCN Button Detection
+## Browser Script Integration
 
-### Supported Selectors
-The extension attempts to find TraeCN's "Accept All" button using:
-- `button[data-testid="accept-all"]`
-- `button[title="接受全部"]`
-- `button[aria-label="接受全部"]`
-- `.accept-all-button`
-- `.trae-accept-all`
+### Script Flow
+1. **VS Code Extension**: Copies browser script to clipboard and opens dev tools
+2. **Browser Script**: IIFE-wrapped automation script with UI controls
+3. **Auto-accept Logic**: Monitors for "全部接受" buttons with text validation
+4. **User Interface**: Draggable control panel with theme switching
 
-### Detection Strategy
-- Uses VS Code's command system to simulate button interaction
-- Provides fallback detection patterns for TraeCN variations
-- Logs detection attempts and results
+### Button Detection Strategy
+The browser script uses multiple CSS selectors to find TraeCN buttons:
+- Primary: `div.chat-todolist-bar button.icd-btn-primary`
+- Validation: Checks button text equals "全部接受"
+- Visibility: Ensures button is visible and clickable
+- Real clicking: Uses native MouseEvent simulation
 
 ## VS Code Extension Patterns
 
@@ -119,11 +123,25 @@ trae-auto-accept/
 └── .gitignore               # Git ignore rules
 ```
 
-## Development Notes
+## Important Implementation Details
 
-- **TraeCN-focused** - Designed specifically for TraeCN interface
-- **No build step required** - Pure JavaScript extension
-- **No dependencies** - Uses only VS Code built-in APIs
-- **Cross-platform** - Works on Windows, macOS, Linux
-- **VS Code 1.74.0+ required** - Uses modern extension APIs
-- **Chinese UI** - Commands and messages in Chinese for TraeCN users
+### Browser Script Features
+- **IIFE encapsulation**: Avoids global namespace pollution
+- **Theme support**: Dark/light mode switching with CSS-in-JS
+- **Draggable UI**: Control panel can be moved around the page
+- **Auto-minimize**: Panel minimizes after 3 seconds of operation
+- **Log buffering**: Maintains last 50 log entries to prevent memory leaks
+- **State management**: Proper cleanup on exit
+
+### Extension Packaging
+- **build.sh**: Automated build script with dependency checking
+- **.vsix format**: Standard VS Code extension package
+- **No external dependencies**: Pure JavaScript using VS Code APIs
+- **Cross-platform**: Works on Windows, macOS, Linux
+- **VS Code 1.74.0+**: Uses modern extension APIs and activation events
+
+### User Experience
+- **Chinese localization**: All UI elements and messages in Chinese
+- **Auto-devtools management**: Opens and closes browser console automatically
+- **Clipboard integration**: Seamless script copying with user feedback
+- **Error handling**: Comprehensive error reporting and recovery
