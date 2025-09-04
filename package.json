@@ -2,7 +2,7 @@
     "name": "trae-auto-accept",
     "displayName": "Trae Auto Accept",
     "description": "TraeCN 自动点击'接受全部'按钮",
-    "version": "1.10.0",
+    "version": "1.11.0",
     "engines": {
         "vscode": "^1.74.0"
     },
