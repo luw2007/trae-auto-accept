@@ -90,7 +90,6 @@
         try {
             const button = document.querySelector('div.chat-todolist-bar button.icd-btn-primary');
             if (!button) {
-                log('⏳ 未找到目标按钮');
                 return false;
             }
             
@@ -100,7 +99,6 @@
                             window.getComputedStyle(button).visibility !== 'hidden';
             
             if (!isVisible) {
-                log('⚠️ 按钮不可见');
                 return false;
             }
             
@@ -108,7 +106,6 @@
             const text = span ? span.textContent.trim() : '';
             
             if (text !== '全部接受') {
-                log(`⚠️ 文本不匹配: "${text}"`);
                 return false;
             }
             
