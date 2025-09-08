@@ -3,6 +3,7 @@
     "displayName": "Trae Auto Accept",
     "description": "TraeCN 自动点击'接受全部'和'继续'按钮",
     "version": "1.12.0",
+    "publisher": "luw2007",
     "engines": {
         "vscode": "^1.74.0"
     },
