@@ -1,8 +1,8 @@
 {
     "name": "trae-auto-accept",
     "displayName": "Trae Auto Accept",
-    "description": "TraeCN 自动点击'接受全部'按钮",
-    "version": "1.11.0",
+    "description": "TraeCN 自动点击'接受全部'和'继续'按钮",
+    "version": "1.12.0",
     "engines": {
         "vscode": "^1.74.0"
     },
@@ -17,7 +17,11 @@
         "commands": [
             {
                 "command": "trae-auto-accept.start",
-                "title": "启动 Trae 自动接受"
+                "title": "启动 Trae 自动操作"
+            },
+            {
+                "command": "trae-auto-accept.stop",
+                "title": "关闭 Trae 自动操作"
             }
         ]
     },

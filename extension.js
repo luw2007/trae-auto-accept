@@ -37,8 +37,25 @@ function activate(context) {
         }, 2000);
     });
 
+    // 关闭自动脚本命令
+    let stopDisposable = vscode.commands.registerCommand('trae-auto-accept.stop', () => {
+        if (!isRunning) {
+            vscode.window.showInformationMessage('Trae 自动接受未在运行');
+            return;
+        }
+
+        if (interval) {
+            clearInterval(interval);
+            interval = null;
+        }
+        isRunning = false;
+        outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] ⏹️ Trae 自动接受已停止`);
+        vscode.window.showInformationMessage('Trae 自动接受已停止');
+    });
+
     // 注册命令
     context.subscriptions.push(startDisposable);
+    context.subscriptions.push(stopDisposable);
 
     // 清理函数
     context.subscriptions.push({
