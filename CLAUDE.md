@@ -26,6 +26,7 @@ This is a specialized VS Code extension designed for TraeCN that provides automa
 
 #### TraeCN Commands
 - `trae-auto-accept.start` - Copies browser script to clipboard and opens dev tools
+- `trae-auto-accept.stop` - Stops the auto-accept functionality and cleans up resources
 
 ## Development Commands
 
@@ -62,7 +63,7 @@ code --install-extension trae-auto-accept.vsix
 
 ### Activation
 - Triggered on VS Code startup (`onStartupFinished`)
-- Registers 1 TraeCN-specific command via `vscode.commands.registerCommand`
+- Registers 2 TraeCN-specific commands via `vscode.commands.registerCommand`
 - Sets up cleanup handlers and output channel
 
 ### Runtime
@@ -114,13 +115,15 @@ trae-auto-accept/
 ├── trae-browser-script.js    # Browser automation script
 ├── package.json              # TraeCN extension manifest
 ├── build.sh                 # TraeCN build script
+├── install.sh               # Installation script
 ├── trae-auto-accept.vsix    # Built TraeCN extension package
 ├── README.md                # TraeCN user documentation
 ├── LICENSE                  # MIT license
 ├── RELEASE.md               # GitHub release instructions
 ├── CLAUDE.md                # Development guidance
 ├── .vscodeignore            # Package ignore rules
-└── .gitignore               # Git ignore rules
+├── .gitignore               # Git ignore rules
+└── docs/                    # Documentation screenshots
 ```
 
 ## Important Implementation Details
