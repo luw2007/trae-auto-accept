@@ -41,6 +41,9 @@ vsce package --out trae-auto-accept.vsix
 
 # Install extension locally for testing
 code --install-extension trae-auto-accept.vsix
+
+# Alternative installation script
+./install.sh
 ```
 
 ### Installation
@@ -57,6 +60,21 @@ code --install-extension trae-auto-accept.vsix
 # Test TraeCN extension commands
 # Open VS Code command palette:
 # - 启动 Trae 自动接受
+# - 关闭 Trae 自动接受
+
+# Browser script testing:
+# 1. Start extension to copy script to clipboard
+# 2. Open browser dev tools console
+# 3. Paste and execute script
+# 4. Test control panel functionality
+```
+
+### Development Workflow
+```bash
+# Make changes to trae-browser-script.js
+# Test in browser console directly
+# Rebuild extension: ./build.sh
+# Reinstall and test in VS Code
 ```
 
 ## Extension Lifecycle
@@ -128,13 +146,21 @@ trae-auto-accept/
 
 ## Important Implementation Details
 
-### Browser Script Features
+### Browser Script Architecture
 - **IIFE encapsulation**: Avoids global namespace pollution
 - **Theme support**: Dark/light mode switching with CSS-in-JS
-- **Draggable UI**: Control panel can be moved around the page
-- **Auto-minimize**: Panel minimizes after 3 seconds of operation
+- **Draggable UI**: Control panel can be moved around the page with boundary limits
+- **Auto-minimize**: Panel minimizes after 3 seconds of operation with user override detection
 - **Log buffering**: Maintains last 50 log entries to prevent memory leaks
-- **State management**: Proper cleanup on exit
+- **State management**: Proper cleanup on exit with event listener removal
+
+### Key Technical Patterns
+- **CSS-in-JS styling**: Dynamic theme application using JavaScript string templates
+- **Event delegation**: Centralized event handling for UI elements
+- **State synchronization**: Consistent state across minimized/maximized views
+- **Boundary detection**: Prevents panel from being dragged outside viewport
+- **Animation system**: CSS keyframes for click count animations with theme-aware colors
+- **Memory management**: Automatic cleanup of intervals, event listeners, and DOM elements
 
 ### Extension Packaging
 - **build.sh**: Automated build script with dependency checking
@@ -148,3 +174,33 @@ trae-auto-accept/
 - **Auto-devtools management**: Opens and closes browser console automatically
 - **Clipboard integration**: Seamless script copying with user feedback
 - **Error handling**: Comprehensive error reporting and recovery
+
+## Development Guidelines
+
+### Code Style Conventions
+- **Inline variables**: Use simple inline variable definitions for better readability
+- **Minimize comments**: Remove unnecessary comments while maintaining clarity
+- **Function naming**: Use descriptive function names that indicate purpose
+- **State management**: Keep state variables minimal and well-documented
+- **Error handling**: Wrap operations in try-catch blocks with user-friendly messages
+
+### Browser Script Development
+- **Test in console**: Always test script changes directly in browser console first
+- **Theme consistency**: Ensure all UI elements work in both light and dark themes
+- **Memory safety**: Clean up event listeners and intervals to prevent memory leaks
+- **Boundary handling**: Implement viewport boundaries for draggable elements
+- **Animation timing**: Use CSS animations for smooth visual feedback
+
+### Extension Development
+- **API compatibility**: Target VS Code 1.74.0+ for modern extension features
+- **Activation events**: Use minimal activation events for better performance
+- **Resource cleanup**: Properly dispose of all resources in deactivation
+- **User feedback**: Provide clear visual and textual feedback for all operations
+- **Clipboard handling**: Handle clipboard operations with error recovery
+
+### Common Issues and Solutions
+- **Extension not activating**: Check activation events and VS Code version compatibility
+- **Script not copying**: Verify file paths and clipboard permissions
+- **UI not displaying**: Check CSS selector specificity and theme application
+- **Animations not working**: Verify CSS keyframe definitions and timing
+- **Memory leaks**: Ensure proper cleanup of intervals and event listeners
