@@ -153,6 +153,8 @@ trae-auto-accept/
 - **Auto-minimize**: Panel minimizes after 3 seconds of operation with user override detection
 - **Log buffering**: Maintains last 50 log entries to prevent memory leaks
 - **State management**: Proper cleanup on exit with event listener removal
+- **Delete button support**: Optional delete functionality with safety confirmation
+- **Red warning system**: Red text for delete-related UI elements and log messages
 
 ### Key Technical Patterns
 - **CSS-in-JS styling**: Dynamic theme application using JavaScript string templates
@@ -190,6 +192,8 @@ trae-auto-accept/
 - **Memory safety**: Clean up event listeners and intervals to prevent memory leaks
 - **Boundary handling**: Implement viewport boundaries for draggable elements
 - **Animation timing**: Use CSS animations for smooth visual feedback
+- **Safety first**: Dangerous operations like delete require explicit user confirmation
+- **Visual warnings**: Use red text and clear warnings for dangerous operations
 
 ### Extension Development
 - **API compatibility**: Target VS Code 1.74.0+ for modern extension features

@@ -5,6 +5,7 @@
     let isRunning = false, interval, isDarkMode = false;
     let isDragging = false, dragOffset = { x: 0, y: 0 };
     let clickLimit = 5, clickCount = 0;
+    let enableDelete = false;
 
     const STYLES = {
         light: 'white,#333,0 4px 6px rgba(0,0,0,0.1),1px solid #ddd,15px,8px|transparent,1px solid #ddd,#333|#333,#666,#666|#f8f9fa,none|white,#333,1px solid #ddd|#e74c3c,#27ae60,#e74c3c',
@@ -71,7 +72,7 @@
         if (!logDiv) return;
 
         const entry = document.createElement('div');
-        entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
         logDiv.appendChild(entry);
 
         if (logDiv.children.length > LOG_BUFFER_SIZE) {
@@ -101,6 +102,10 @@
         {name: '全部接受', selector: 'div.chat-todolist-bar button.icd-btn-primary', validate: (b) => {
             const span = b.querySelector('span.icd-btn-content');
             return (span ? span.textContent.trim() : '') === '全部接受';
+        }},
+        {name: '删除', selector: 'button.icd-delete-files-command-card-v2-actions-delete', validate: (b) => {
+            const span = b.querySelector('span.icd-btn-content');
+            return (span ? span.textContent.trim() : '') === '删除' && enableDelete;
         }}
     ];
 
@@ -126,7 +131,10 @@
             button.dispatchEvent(event);
             clickCount++;
             updateMinimizedTitle();
-            log(`✅ 成功点击"${buttonName}"按钮 (${clickCount}/${clickLimit})`);
+            const logMessage = buttonName === '删除' ?
+                `✅ 成功点击<span style="color: #e74c3c; font-weight: bold;">"${buttonName}"</span>按钮 (${clickCount}/${clickLimit})` :
+                `✅ 成功点击"${buttonName}"按钮 (${clickCount}/${clickLimit})`;
+            log(logMessage);
 
             showClickAnimation();
 
@@ -207,7 +215,7 @@
         if (isRunning) return;
         isRunning = true;
         applyTheme();
-        log('🚀 启动自动操作 (支持继续、运行、接受按钮)');
+        log('🚀 启动自动操作 (支持继续、运行、接受按钮' + (enableDelete ? '、<span style="color: #e74c3c; font-weight: bold;">删除按钮</span>' : '') + ')');
 
         interval = setInterval(findAndClick, 5000);
         findAndClick();
@@ -415,14 +423,20 @@
                 <button id="trae-minimize" title="收起">－</button>
             </div>
             <div id="trae-controls">
-                <div style="display: flex; justify-content: center; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: center; margin-bottom: 10px; gap: 8px;">
                     <button id="trae-toggle" style="background: transparent; padding: 8px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-weight: bold;">启动</button>
+                    <button id="trae-theme" style="background: transparent; padding: 8px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-weight: bold;">主题</button>
+                    <button id="trae-exit" style="background: transparent; padding: 8px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-weight: bold;">退出</button>
+                </div>
+                <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 15px;">
                     <div style="display: flex; align-items: center; margin: 2px; padding: 6px 8px; border-radius: 4px;">
                         <span style="font-size: 12px; margin-right: 4px;">限额:</span>
                         <input type="number" id="trae-click-limit" min="0" max="99" value="5" style="width: 30px; padding: 4px; border-radius: 3px; font-size: 12px;">
                     </div>
-                    <button id="trae-theme" style="background: transparent; padding: 8px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-weight: bold;">主题</button>
-                    <button id="trae-exit" style="background: transparent; padding: 8px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-weight: bold;">退出</button>
+                    <div style="display: flex; align-items: center; margin: 2px; padding: 6px 8px; border-radius: 4px;">
+                        <input type="checkbox" id="trae-enable-delete" style="margin-right: 4px;">
+                        <span style="font-size: 12px; color: #e74c3c; font-weight: bold;">启用删除</span>
+                    </div>
                 </div>
                 <div id="trae-log" style="margin-top: 10px; font-size: 10px; max-height: 100px; overflow-y: auto;"></div>
             </div>
@@ -440,6 +454,7 @@
         const exitBtn = document.getElementById('trae-exit');
         const themeBtn = document.getElementById('trae-theme');
         const limitInput = document.getElementById('trae-click-limit');
+        const deleteCheckbox = document.getElementById('trae-enable-delete');
 
         header.addEventListener('click', e => !e.target.closest('button') && minimize());
         minimizeBtn.addEventListener('click', e => { e.stopPropagation(); minimize(); });
@@ -450,6 +465,10 @@
 
         if (limitInput) {
             limitInput.addEventListener('input', e => { e.stopPropagation(); updateClickLimit(e.target.value); });
+        }
+
+        if (deleteCheckbox) {
+            deleteCheckbox.addEventListener('change', e => { e.stopPropagation(); enableDelete = e.target.checked; log(`🗑️ 删除功能已<span style="color: #e74c3c; font-weight: bold;">${enableDelete ? '启用' : '禁用'}</span>`); });
         }
 
         updateMinimizeButton(false);
@@ -489,7 +508,7 @@
 
         log('🎯 TraeCN 自动操作脚本已加载');
         log(`📝 日志缓冲区: ${LOG_BUFFER_SIZE} 条`);
-        log('✨ 支持功能: 自动点击继续、运行、接受按钮');
+        log('✨ 支持功能: 自动点击继续、运行、接受按钮' + (enableDelete ? '、<span style="color: #e74c3c; font-weight: bold;">删除按钮</span>' : ''));
     }
     
     window.traeAutoAccept = {
