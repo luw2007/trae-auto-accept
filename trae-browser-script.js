@@ -4,63 +4,166 @@
     const LOG_BUFFER_SIZE = 50;
     let isRunning = false, interval, isDarkMode = false;
     let isDragging = false, dragOffset = { x: 0, y: 0 };
+let isCommandDragging = false, draggedCommand = null;
     let clickLimit = 5, clickCount = 0;
     let enableDelete = false;
+    let commands = [];
 
-    const STYLES = {
-        light: 'white,#333,0 4px 6px rgba(0,0,0,0.1),1px solid #ddd,15px,8px|transparent,1px solid #ddd,#333|#333,#666,#666|#f8f9fa,none|white,#333,1px solid #ddd|#e74c3c,#27ae60,#e74c3c',
-        dark: '#2c3e50,white,0 4px 6px rgba(0,0,0,0.3),none,15px,8px|transparent,1px solid #666,white|white,#bbb,#bbb|#34495e,1px solid #4a5f7a|#2c3e50,white,1px solid #4a5f7a|#e74c3c,#27ae60,#e74c3c'
+    // 简洁的主题系统 - 使用CSS变量
+    const THEMES = {
+        light: {
+            // 主要颜色
+            '--bg-primary': '#ffffff',
+            '--bg-secondary': '#f8f9fa',
+            '--bg-tertiary': '#f5f5f5',
+            '--text-primary': '#333333',
+            '--text-secondary': '#666666',
+            '--text-tertiary': '#8c8c8c',
+
+            // 边框和阴影
+            '--border-color': '#e0e0e0',
+            '--border-light': '#ddd',
+            '--shadow': '0 4px 6px rgba(0,0,0,0.1)',
+
+            // 状态颜色
+            '--success': '#27ae60',
+            '--warning': '#e74c3c',
+            '--info': '#4096ff',
+
+            // 特殊元素
+            '--panel-bg': '#ffffff',
+            '--panel-border': '1px solid #e0e0e0',
+            '--input-bg': '#fafafa',
+            '--input-border': '#e0e0e0',
+            '--button-bg': 'transparent',
+            '--button-border': '1px solid #ddd',
+            '--log-bg': '#fafafa',
+            '--log-border': '#e0e0e0',
+            '--command-bg': '#f5f7fa',
+            '--command-border': '#e0e0e0'
+        },
+        dark: {
+            // 主要颜色
+            '--bg-primary': '#2c3e50',
+            '--bg-secondary': '#34495e',
+            '--bg-tertiary': '#1a252f',
+            '--text-primary': '#ffffff',
+            '--text-secondary': '#bbbbbb',
+            '--text-tertiary': '#999999',
+
+            // 边框和阴影
+            '--border-color': '#4a5f7a',
+            '--border-light': '#666666',
+            '--shadow': '0 4px 6px rgba(0,0,0,0.3)',
+
+            // 状态颜色
+            '--success': '#27ae60',
+            '--warning': '#e74c3c',
+            '--info': '#4096ff',
+
+            // 特殊元素
+            '--panel-bg': '#2c3e50',
+            '--panel-border': 'none',
+            '--input-bg': '#34495e',
+            '--input-border': '#4a5f7a',
+            '--button-bg': 'transparent',
+            '--button-border': '1px solid #666',
+            '--log-bg': '#2c3e50',
+            '--log-border': '#4a5f7a',
+            '--command-bg': '#34495e',
+            '--command-border': '#4a5f7a'
+        }
     };
     
-      function applyTheme() {
-        const theme = STYLES[isDarkMode ? 'dark' : 'light'];
-        const [panel, button, text, limitArea, input, special] = theme.split('|');
-        const [pBg, pColor, pShadow, pBorder, pPad, pRadius] = panel.split(',');
-        const [bBg, bBorder, bColor] = button.split(',');
-        const [tPrimary, tSecondary, tLog] = text.split(',');
-        const [lBg, lBorder] = limitArea.split(',');
-        const [iBg, iColor, iBorder] = input.split(',');
-        const [eBtn, sRunning, sStopped] = special.split(',');
+    // 简洁的主题应用函数 - 使用CSS变量
+    function applyTheme() {
+        const theme = THEMES[isDarkMode ? 'dark' : 'light'];
+        const root = document.documentElement;
 
-        const panelEl = document.getElementById('trae-panel');
-        if (panelEl) {
-            panelEl.style.background = pBg;
-            panelEl.style.color = pColor;
-            panelEl.style.boxShadow = pShadow;
-            panelEl.style.border = pBorder;
-            panelEl.style.borderRadius = pRadius;
-        }
-        
-        setElStyle('trae-theme', `background:${bBg};border:${bBorder};color:${tPrimary};padding:8px 12px;margin:2px;border-radius:4px;cursor:pointer;font-weight:bold`);
-        setElStyle('trae-exit', `background:${bBg};border:1px solid ${eBtn};color:${eBtn};padding:8px 12px;margin:2px;border-radius:4px;cursor:pointer;font-weight:bold`);
+        // 应用所有CSS变量
+        Object.entries(theme).forEach(([key, value]) => {
+            root.style.setProperty(key, value);
+        });
 
-        const minimizeBtnStyle = `color:${tPrimary};width:24px;height:24px;border-radius:6px;cursor:pointer;font-size:16px;background:${bBg};border:none;display:flex;align-items:center;justify-content:center`;
-        const minimizeBtn = document.getElementById('trae-minimize');
-        const minimizeBtnMinimized = document.getElementById('trae-minimize-minimized');
-        if (minimizeBtn) minimizeBtn.style.cssText = minimizeBtnStyle;
-        if (minimizeBtnMinimized) minimizeBtnMinimized.style.cssText = minimizeBtnStyle;
-
-        setElStyle('trae-log', tLog);
-
-        const limitEl = document.querySelector('#trae-controls div[style*="background: #f8f9fa"]');
-        if (limitEl) limitEl.style.cssText = `background:${lBg};border:${lBorder}`;
-
-        setElStyle('trae-click-limit', `background:${iBg};color:${iColor};border:${iBorder}`);
-        setElStyle('trae-click-count', tSecondary);
-
+        // 更新状态图标
         const statusIcon = document.getElementById('trae-status-icon');
         const statusIconMinimized = document.getElementById('trae-status-icon-minimized');
-        if (statusIcon) statusIcon.style.background = isRunning ? sRunning : sStopped;
-        if (statusIconMinimized) statusIconMinimized.style.background = isRunning ? sRunning : sStopped;
+        const statusColor = isRunning ? theme['--success'] : theme['--text-tertiary'];
 
+        if (statusIcon) statusIcon.style.background = statusColor;
+        if (statusIconMinimized) statusIconMinimized.style.background = statusColor;
+
+        // 更新按钮状态
         const toggleBtn = document.getElementById('trae-toggle');
         if (toggleBtn) {
-            const color = isRunning ? sStopped : sRunning;
-            toggleBtn.style.cssText = `background:${bBg};border:1px solid ${color};color:${color};padding:8px 12px;margin:2px;border-radius:4px;cursor:pointer;font-weight:bold`;
+            const buttonColor = isRunning ? theme['--text-tertiary'] : theme['--success'];
+            toggleBtn.style.cssText = `background:var(--button-bg);border:1px solid ${buttonColor};color:${buttonColor};padding:8px 12px;margin:2px;border-radius:4px;cursor:pointer;font-weight:bold`;
             toggleBtn.textContent = isRunning ? '停止' : '启动';
+        }
+
+        // 更新输入框焦点样式
+        const commandInput = document.getElementById('trae-command-input');
+        if (commandInput) {
+            commandInput.onfocus = function() {
+                this.style.borderColor = theme['--info'];
+                this.style.background = theme['--input-bg'];
+            };
+            commandInput.onblur = function() {
+                this.style.borderColor = theme['--input-border'];
+                this.style.background = theme['--input-bg'];
+            };
+            // 设置初始样式
+            commandInput.style.borderColor = theme['--input-border'];
+            commandInput.style.background = theme['--input-bg'];
+        }
+
+        // 更新checkbox样式
+        const deleteCheckbox = document.getElementById('trae-enable-delete');
+        if (deleteCheckbox) {
+            deleteCheckbox.style.accentColor = theme['--info'];
+        }
+
+        // 更新限额输入框样式
+        const clickLimitInput = document.getElementById('trae-click-limit');
+        if (clickLimitInput) {
+            clickLimitInput.style.cssText = `width:35px;padding:2px 4px;border-radius:2px;font-size:11px;border:1px solid var(--input-border);outline:none;text-align:center;background:var(--input-bg);color:var(--text-primary);`;
+        }
+
+        // 更新命令列表样式
+        const commandItems = document.querySelectorAll('.command-item');
+        commandItems.forEach(item => {
+            item.style.background = theme['--command-bg'];
+            item.style.border = `1px solid ${theme['--command-border']}`;
+        });
+
+        // 更新命令文本颜色
+        const commandTexts = document.querySelectorAll('.command-text, .command-status');
+        commandTexts.forEach(text => {
+            text.style.color = theme['--text-primary'];
+        });
+
+        // 更新输入框焦点样式
+        if (commandInput) {
+            // 移除之前的事件监听器
+            commandInput.removeEventListener('focus', commandInput._focusHandler);
+            commandInput.removeEventListener('blur', commandInput._blurHandler);
+
+            // 添加新的事件监听器
+            commandInput._focusHandler = function() {
+                this.style.borderColor = theme['--info'];
+                this.style.background = theme['--input-bg'];
+            };
+            commandInput._blurHandler = function() {
+                this.style.borderColor = theme['--input-border'];
+                this.style.background = theme['--input-bg'];
+            };
+
+            commandInput.addEventListener('focus', commandInput._focusHandler);
+            commandInput.addEventListener('blur', commandInput._blurHandler);
         }
     }
     
+    // 简洁的主题切换
     function toggleTheme() {
         isDarkMode = !isDarkMode;
         applyTheme();
@@ -68,23 +171,349 @@
     }
     
     function log(msg) {
-        const logDiv = document.getElementById('trae-log');
-        if (!logDiv) return;
+        const logList = document.getElementById('trae-log-list');
+        const logCount = document.getElementById('trae-log-count');
+        const logArrow = document.getElementById('trae-log-arrow');
+
+        if (!logList) return;
+
+        // 解析日志类型
+        let logType = 'info';
+        let logIcon = 'ℹ️';
+        if (msg.includes('✅')) {
+            logType = 'success';
+            logIcon = '✅';
+        } else if (msg.includes('❌')) {
+            logType = 'warning';
+            logIcon = '❌';
+        } else if (msg.includes('⚠️')) {
+            logType = 'warning';
+            logIcon = '⚠️';
+        } else if (msg.includes('🎯') || msg.includes('📝') || msg.includes('✨')) {
+            logType = 'info';
+            logIcon = 'ℹ️';
+        }
 
         const entry = document.createElement('div');
-        entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        logDiv.appendChild(entry);
+        entry.className = `log-item ${logType}`;
+        entry.innerHTML = `
+            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+            <span class="log-text">${logIcon} ${msg}</span>
+        `;
 
-        if (logDiv.children.length > LOG_BUFFER_SIZE) {
+        logList.appendChild(entry);
+
+        if (logList.children.length > LOG_BUFFER_SIZE) {
             for (let i = 0; i < Math.floor(LOG_BUFFER_SIZE / 2); i++) {
-                logDiv.removeChild(logDiv.children[i]);
+                logList.removeChild(logList.children[i]);
             }
         }
 
-        logDiv.scrollTop = logDiv.scrollHeight;
+        // 更新日志计数
+        if (logCount) {
+            logCount.textContent = `${logList.children.length} 条`;
+        }
+
+        logList.scrollTop = logList.scrollHeight;
         console.log(`[TraeCN] ${msg}`);
+
+        // 日志抽屉保持手动展开，不自动展开
     }
+
+    function addCommand() {
+        const input = document.getElementById('trae-command-input');
+        const command = input.value.trim();
+
+        if (!command) {
+            log('❌ 命令不能为空');
+            return;
+        }
+
+        // 检查是否有相同的待执行命令
+        const existingCommand = commands.find(cmd => cmd.text === command && cmd.status === 'pending');
+        if (existingCommand) {
+            log('⚠️ 命令已存在，无需重复添加');
+            return;
+        }
+
+        commands.push({
+            id: Date.now(),
+            text: command,
+            status: 'pending' // pending, executing, completed
+        });
+
+        input.value = '';
+        updateCommandList();
+        log(`✅ 已发送命令: ${command}`);
+    }
+
+    function removeCommand(id) {
+        const index = commands.findIndex(cmd => cmd.id === id);
+        if (index !== -1) {
+            const command = commands[index];
+            commands.splice(index, 1);
+            updateCommandList();
+            log(`🗑️ 已删除命令: ${command.text}`);
+        }
+    }
+
+
+    function updateCommandList() {
+        const listContainer = document.getElementById('trae-command-items');
+        const countContainer = document.getElementById('trae-command-count');
+        if (!listContainer || !countContainer) return;
+
+        listContainer.innerHTML = '';
+
+        // 更新命令计数
+        const pendingCount = commands.filter(cmd => cmd.status === 'pending').length;
+        countContainer.textContent = `${commands.length} 个命令`;
+
+        commands.forEach((command, index) => {
+            const commandItem = document.createElement('div');
+            commandItem.className = `command-item ${command.status === 'completed' ? 'completed' : ''}`;
+
+            const statusIcon = command.status === 'completed' ? '✅' :
+                               command.status === 'executing' ? '⏳' : '→';
+
+            commandItem.innerHTML = `
+                <span class="drag-handle" style="display: ${command.status === 'pending' ? 'block' : 'none'};" draggable="true" data-command-id="${command.id}">⋮⋮</span>
+                <span class="command-status">${statusIcon}</span>
+                <span class="command-text" style="cursor: text; user-select: text;">${command.text}</span>
+                <span class="command-delete" onclick="removeCommand(${command.id})" title="删除">×</span>
+            `;
+
+            // 只有待执行的命令才能拖拽，但只在拖拽图标上触发
+            if (command.status === 'pending') {
+                const dragHandle = commandItem.querySelector('.drag-handle');
+                dragHandle.ondragstart = (e) => handleCommandDragStart(e, command.id);
+                dragHandle.ondragend = handleCommandDragEnd;
+                dragHandle.ondragover = handleCommandDragOver;
+                dragHandle.ondrop = (e) => handleCommandDrop(e, command.id);
+
+                // 只在拖拽图标上显示拖拽光标，文本区域保持正常
+                dragHandle.style.cursor = 'grab';
+                dragHandle.dataset.commandId = command.id;
+
+                commandItem.dataset.commandId = command.id;
+            }
+
+            listContainer.appendChild(commandItem);
+        });
+
+        updateMinimizedTitle();
+
+        // 确保新添加的命令应用当前主题样式
+        applyTheme();
+    }
+
     
+    
+    function checkChatInputStatus() {
+        try {
+            const chatInput = document.querySelector('.chat-input-v2-input-box-editable');
+            const sendButton = document.querySelector('.chat-input-v2-send-button');
+
+            if (!chatInput || !sendButton) {
+                log('❌ 未找到chat-input组件');
+                return 'not_found';
+            }
+
+            const isRunning = sendButton.querySelector('.codicon-stop-circle');
+            const isDisabled = sendButton.disabled;
+            const hasArrowUp = sendButton.querySelector('.codicon-icube-ArrowUp');
+
+            let status = '';
+            let details = [];
+
+            // 修正状态检测逻辑
+            if (isRunning) {
+                status = 'running';
+                details.push('运行中');
+            } else if (isDisabled) {
+                // 按钮禁用状态实际上是等待输入的状态
+                status = 'ready';
+                details.push('等待输入');
+            } else if (hasArrowUp) {
+                status = 'ready';
+                details.push('准备发送');
+            } else {
+                status = 'waiting';
+                details.push('等待状态');
+            }
+
+            // 检查输入框内容
+            const hasContent = chatInput.textContent.trim().length > 0;
+            if (hasContent) {
+                details.push('有内容');
+            }
+
+            // 检查优化按钮状态
+            const optimizeBtn = document.querySelector('.chat-input-v2-prompt-optimize-button');
+            if (optimizeBtn && !optimizeBtn.disabled) {
+                details.push('优化可用');
+            }
+
+            log(`📊 Chat-Input状态: ${status} (${details.join(', ')})`);
+            return status;
+        } catch (error) {
+            log(`❌ 检测状态失败: ${error.message}`);
+            return 'error';
+        }
+    }
+
+    function inputCommandToChat(command) {
+        try {
+            // 查找chat-input输入框
+            const chatInput = document.querySelector('.chat-input-v2-input-box-editable');
+            if (!chatInput) {
+                log('❌ 未找到chat-input输入框');
+                return false;
+            }
+
+            // 检查是否在运行状态
+            const sendButton = document.querySelector('.chat-input-v2-send-button');
+            if (!sendButton) {
+                log('❌ 未找到发送按钮');
+                return false;
+            }
+
+            const isRunning = sendButton.querySelector('.codicon-stop-circle');
+            if (isRunning) {
+                log('⚠️ Trae正在运行，等待输入状态');
+                return false;
+            }
+
+            log(`📝 正在输入命令: ${command}`);
+
+            // 聚焦到输入框
+            chatInput.focus();
+
+            // 清空输入框
+            chatInput.innerHTML = '';
+
+            // 创建符合Lexical编辑器格式的HTML结构
+            const paragraph = document.createElement('p');
+            paragraph.className = 'chat-input-v2__paragraph';
+            paragraph.setAttribute('dir', 'ltr');
+
+            // 处理多行命令
+            const lines = command.split('\n');
+            lines.forEach((line, index) => {
+                if (index > 0) {
+                    const br = document.createElement('br');
+                    paragraph.appendChild(br);
+                }
+                const textNode = document.createTextNode(line);
+                paragraph.appendChild(textNode);
+            });
+
+            chatInput.appendChild(paragraph);
+
+            // 添加data-text-content属性确保Lexical能识别
+            chatInput.setAttribute('data-text-content', command);
+            paragraph.setAttribute('data-text-content', command);
+
+            // 触发必要的事件序列
+            const events = ['focus', 'input', 'change', 'keyup', 'keydown', 'DOMSubtreeModified', 'compositionend'];
+            events.forEach(eventType => {
+                try {
+                    const event = new Event(eventType, {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window
+                    });
+                    chatInput.dispatchEvent(event);
+                } catch (e) {
+                    // 忽略事件触发失败
+                }
+            });
+
+            // 尝试使用InputEvent
+            try {
+                const inputEvent = new InputEvent('input', {
+                    bubbles: true,
+                    cancelable: true,
+                    data: command,
+                    inputType: 'insertText'
+                });
+                chatInput.dispatchEvent(inputEvent);
+            } catch (e) {
+                log(`InputEvent触发失败: ${e.message}`);
+            }
+
+            // 额外触发一些Lexical可能需要的自定义事件
+            try {
+                const lexicalEvent = new Event('lexical-update', {
+                    bubbles: true,
+                    cancelable: true
+                });
+                chatInput.dispatchEvent(lexicalEvent);
+            } catch (e) {
+                // 忽略自定义事件失败
+            }
+
+            log('✅ 命令已插入，等待界面响应...');
+
+            // 等待界面响应后再检查发送状态
+            setTimeout(() => {
+                checkAndSendCommand(sendButton, command);
+            }, 1000);
+
+            return true;
+        } catch (error) {
+            log(`❌ 输入命令失败: ${error.message}`);
+            return false;
+        }
+    }
+
+    function checkAndSendCommand(sendButton, command) {
+        try {
+            // 检查当前按钮状态
+            const isRunning = sendButton.querySelector('.codicon-stop-circle');
+            const isDisabled = sendButton.disabled;
+            const hasArrowUp = sendButton.querySelector('.codicon-icube-ArrowUp');
+
+            log(`📊 发送前状态: running=${!!isRunning}, disabled=${isDisabled}, hasArrowUp=${!!hasArrowUp}`);
+
+            // 检查输入框是否有内容
+            const chatInput = document.querySelector('.chat-input-v2-input-box-editable');
+            const paragraph = chatInput.querySelector('p.chat-input-v2__paragraph');
+            const textContent = paragraph ? paragraph.textContent.trim() : '';
+            const hasContent = chatInput && textContent.length > 0;
+
+            if (!hasContent) {
+                log('❌ 输入框为空，无法发送');
+                return false;
+            }
+
+            // 只有在可以发送的状态才发送
+            if (!isRunning && !isDisabled) {
+                sendButton.click();
+                log('📤 命令已发送');
+                return true;
+            } else if (isRunning) {
+                log('⚠️ Trae正在运行，等待发送时机');
+                // 等待5秒后重试
+                setTimeout(() => {
+                    checkAndSendCommand(sendButton, command);
+                }, 5000);
+            } else if (isDisabled) {
+                log('⚠️ 按钮被禁用，等待可用状态');
+                // 等待3秒后重试
+                setTimeout(() => {
+                    checkAndSendCommand(sendButton, command);
+                }, 3000);
+            }
+
+            return false;
+        } catch (error) {
+            log(`❌ 发送命令失败: ${error.message}`);
+            return false;
+        }
+    }
+
+      
     function isButtonVisible(button) {
         try {
             const rect = button.getBoundingClientRect();
@@ -147,6 +576,16 @@
 
     function findAndClick() {
         try {
+            // 首先检查是否有待执行的命令
+            const pendingCommands = commands.filter(cmd => cmd.status === 'pending');
+            if (pendingCommands.length > 0) {
+                // 尝试执行命令队列
+                if (processNextCommandInQueue()) {
+                    return true;
+                }
+            }
+
+            // 如果没有命令或命令执行失败，执行原来的点击逻辑
             for (const config of BUTTON_CONFIGS) {
                 const button = findButton(config);
                 if (button) {
@@ -262,14 +701,93 @@
         }
     }
 
+    function processNextCommandInQueue() {
+        try {
+            const pendingCommands = commands.filter(cmd => cmd.status === 'pending');
+            if (pendingCommands.length === 0) {
+                return false;
+            }
+
+            const nextCommand = pendingCommands[0];
+            const commandIndex = commands.findIndex(cmd => cmd.id === nextCommand.id);
+
+            // 检查chat-input状态
+            const sendButton = document.querySelector('.chat-input-v2-send-button');
+            if (!sendButton) {
+                log('❌ 未找到发送按钮');
+                return false;
+            }
+
+            const isRunning = sendButton.querySelector('.codicon-stop-circle');
+            if (isRunning) {
+                log('⚠️ Trae正在运行，跳过命令执行');
+                return false;
+            }
+
+            // 执行命令
+            commands[commandIndex].status = 'executing';
+            updateCommandList();
+
+            const success = inputCommandToChat(nextCommand.text);
+            if (success) {
+                commands[commandIndex].status = 'completed';
+                clickCount++;
+                updateMinimizedTitle();
+                log(`✅ 命令执行完成: ${nextCommand.text} (${clickCount}/${clickLimit === 0 ? '∞' : clickLimit})`);
+
+                // 检查是否达到点击次数限制
+                if (clickLimit > 0 && clickCount >= clickLimit) {
+                    stop(true);
+                }
+            } else {
+                commands[commandIndex].status = 'pending';
+                log(`❌ 命令执行失败: ${nextCommand.text}`);
+            }
+
+            updateCommandList();
+            return success;
+        } catch (error) {
+            log(`❌ 处理命令队列失败: ${error.message}`);
+            return false;
+        }
+    }
+
     function updateMinimizedTitle() {
         const title = document.getElementById('trae-title');
         const minimizedTitle = document.getElementById('trae-minimized-title');
+        const queueStatus = document.getElementById('trae-queue-status');
         const clickLimitDisplay = clickLimit === 0 ? '∞' : clickLimit;
-        const titleContent = `Auto <span class="trae-count-wrapper">${clickCount}</span>/${clickLimitDisplay} <span class="trae-plus-placeholder"></span>`;
+        const pendingCommands = commands.filter(cmd => cmd.status === 'pending').length;
+        const executingCommands = commands.filter(cmd => cmd.status === 'executing').length;
+        const completedCommands = commands.filter(cmd => cmd.status === 'completed').length;
+        const totalCommands = commands.length;
+
+        let commandInfo = '';
+        if (totalCommands > 0) {
+            commandInfo = ` (${pendingCommands}/${totalCommands})`;
+        }
+
+        const titleContent = `Auto <span class="trae-count-wrapper">${clickCount}</span>/${clickLimitDisplay}${commandInfo} <span class="trae-plus-placeholder"></span>`;
 
         if (title) title.innerHTML = titleContent;
         if (minimizedTitle) minimizedTitle.innerHTML = titleContent;
+
+        // 更新队列状态
+        if (queueStatus) {
+            if (totalCommands > 0) {
+                queueStatus.style.display = 'block';
+                let queueText = `队列: ${totalCommands} 个`;
+                if (isRunning) {
+                    queueText += ' (运行中)';
+                }
+                if (pendingCommands > 0) {
+                    queueText += ` - ${pendingCommands} 待执行`;
+                }
+                queueStatus.textContent = queueText;
+            } else {
+                queueStatus.style.display = 'none';
+            }
+        }
     }
 
     function showClickAnimation(isSimulated = false) {
@@ -359,9 +877,9 @@
             header.style.display = 'flex';
             minimizedContent.style.display = 'none';
             panel.style.padding = '15px';
-            panel.style.minWidth = '320px';
+            panel.style.minWidth = '350px';
             panel.style.width = 'auto';
-            panel.style.maxWidth = '400px';
+            panel.style.maxWidth = '500px';
             title.style.display = 'block';
             minimizedTitle.style.display = 'none';
             panel.style.removeProperty('display');
@@ -409,11 +927,14 @@
 
         panel.innerHTML = `
             <div id="trae-minimized-content" style="display: none; justify-content: space-between; align-items: center; width: 100%;">
-                <div style="display: flex; align-items: center;">
+                <div style="display: flex; align-items: center; flex: 1;">
                     <div id="trae-status-icon-minimized" style="width: 16px; height: 16px; border-radius: 50%; margin-right: 8px;"></div>
-                    <div id="trae-minimized-title" style="font-weight: bold; user-select: none;">Auto 0/∞<span class="trae-plus-placeholder"></span></div>
+                    <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                        <div id="trae-minimized-title" style="font-weight: bold; user-select: none; font-size: 12px;">Auto 0/∞<span class="trae-plus-placeholder"></span></div>
+                        <div id="trae-queue-status" style="font-size: 10px; color: #666; display: none;">队列: 0 个命令</div>
+                    </div>
                 </div>
-                <button id="trae-minimize-minimized" title="收起">－</button>
+                <button id="trae-minimize-minimized" title="收起" style="margin-left: 8px;">－</button>
             </div>
             <div id="trae-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                 <div style="display: flex; align-items: center;">
@@ -423,29 +944,636 @@
                 <button id="trae-minimize" title="收起">－</button>
             </div>
             <div id="trae-controls">
-                <div style="display: flex; justify-content: center; margin-bottom: 10px; gap: 8px;">
-                    <button id="trae-toggle" style="background: transparent; padding: 8px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-weight: bold;">启动</button>
-                    <button id="trae-theme" style="background: transparent; padding: 8px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-weight: bold;">主题</button>
-                    <button id="trae-exit" style="background: transparent; padding: 8px 12px; margin: 2px; border-radius: 4px; cursor: pointer; font-weight: bold;">退出</button>
-                </div>
-                <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 15px;">
-                    <div style="display: flex; align-items: center; margin: 2px; padding: 6px 8px; border-radius: 4px;">
-                        <span style="font-size: 12px; margin-right: 4px;">限额:</span>
-                        <input type="number" id="trae-click-limit" min="0" max="99" value="5" style="width: 30px; padding: 4px; border-radius: 3px; font-size: 12px;">
+                <!-- 功能入口和配置区域 -->
+                <div style="display: flex; justify-content: center; align-items: center; gap: 30px; margin-bottom: 15px;">
+                    <!-- 功能入口按钮组 -->
+                    <div style="display: flex; gap: 8px;">
+                        <button id="trae-toggle" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 10px 16px; margin: 2px; border-radius: 8px; cursor: pointer; font-weight: 600; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s ease;">启动</button>
+                        <button id="trae-theme" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 10px 16px; margin: 2px; border-radius: 8px; cursor: pointer; font-weight: 600; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s ease;">主题</button>
+                        <button id="trae-exit" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; padding: 10px 16px; margin: 2px; border-radius: 8px; cursor: pointer; font-weight: 600; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.2s ease;">退出</button>
                     </div>
-                    <div style="display: flex; align-items: center; margin: 2px; padding: 6px 8px; border-radius: 4px;">
-                        <input type="checkbox" id="trae-enable-delete" style="margin-right: 4px;">
-                        <span style="font-size: 12px; color: #e74c3c; font-weight: bold;">启用删除</span>
+
+                    <!-- 配置选项区域 -->
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <!-- 自动删除配置 -->
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span>自动删除</span>
+                            <input type="checkbox" id="trae-enable-delete">
+                        </div>
+                        <!-- 限额配置 -->
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span>限额</span>
+                            <input type="number" id="trae-click-limit" min="0" max="99" value="5">
+                        </div>
                     </div>
                 </div>
-                <div id="trae-log" style="margin-top: 10px; font-size: 10px; max-height: 100px; overflow-y: auto;"></div>
+
+                <!-- 抽屉式操作日志 -->
+                <div id="trae-log-drawer">
+                    <div id="trae-log-toggle">
+                        <div>
+                            <span id="trae-log-arrow">▶</span>
+                            <span>操作日志</span>
+                        </div>
+                        <span id="trae-log-count">0 条</span>
+                    </div>
+                    <div id="trae-log-content">
+                        <div id="trae-log-list"></div>
+                    </div>
+                </div>
+
+                <!-- 命令输入区域 - 始终可见 -->
+                <div id="trae-command-input-area">
+                    <textarea id="trae-command-input" placeholder="输入命令..." onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();addCommand();}"></textarea>
+                    <button id="trae-add-command" disabled>发送</button>
+                </div>
+
+                <!-- 抽屉式命令列表区域 -->
+                <div id="trae-command-drawer">
+                    <!-- 命令列表头部 -->
+                    <div id="trae-command-toggle">
+                        <div>
+                            <span id="trae-command-arrow">▶</span>
+                            <span>命令列表</span>
+                        </div>
+                        <span id="trae-command-count">0 个命令</span>
+                    </div>
+
+                    <!-- 命令列表内容区域 -->
+                    <div id="trae-command-content" style="display: none;">
+                        <div id="trae-command-list" style="max-height: 200px; overflow-y: auto; background: var(--bg-primary); border-top: 1px solid var(--border-color);" data-theme-bg="white" data-theme-border="#e0e0e0">
+                            <div id="trae-command-items" style="padding: 12px 16px;"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
 
-        panel.style.cssText = 'position:fixed;top:20px;right:20px;background:white;color:#333;padding:15px;border-radius:8px;box-shadow:0 4px 6px rgba(0,0,0,0.1);border:1px solid #ddd;z-index:999999;font-family:monospace;min-width:200px;max-width:300px;transition:all 0.3s ease;cursor:move;display:block';
+        panel.style.cssText = 'position:fixed;top:20px;right:20px;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-width:380px;max-width:420px;transition:all 0.3s ease;cursor:move;display:block;backdrop-filter:blur(10px);';
 
         document.body.appendChild(panel);
         updateMinimizedTitle();
+
+        // 添加基础CSS样式 - 使用CSS变量
+        const style = document.createElement('style');
+        style.textContent = `
+            :root {
+                /* 基础主题变量 - 会在applyTheme中动态更新 */
+                --bg-primary: #ffffff;
+                --bg-secondary: #f8f9fa;
+                --bg-tertiary: #f5f5f5;
+                --text-primary: #333333;
+                --text-secondary: #666666;
+                --text-tertiary: #8c8c8c;
+                --border-color: #e0e0e0;
+                --border-light: #ddd;
+                --shadow: 0 4px 6px rgba(0,0,0,0.1);
+                --success: #27ae60;
+                --warning: #e74c3c;
+                --info: #4096ff;
+                --panel-bg: #ffffff;
+                --panel-border: 1px solid #e0e0e0;
+                --input-bg: #fafafa;
+                --input-border: #e0e0e0;
+                --button-bg: transparent;
+                --button-border: 1px solid #ddd;
+                --log-bg: #fafafa;
+                --log-border: #e0e0e0;
+                --command-bg: #f5f7fa;
+                --command-border: #e0e0e0;
+            }
+
+            /* 基础面板样式 */
+            #trae-panel {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: var(--panel-bg);
+                color: var(--text-primary);
+                padding: 20px;
+                border-radius: 12px;
+                box-shadow: var(--shadow);
+                border: var(--panel-border);
+                z-index: 999999;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                min-width: 380px;
+                max-width: 420px;
+                transition: all 0.3s ease;
+                cursor: move;
+                display: block;
+                backdrop-filter: blur(10px);
+            }
+
+            #trae-panel * {
+                box-sizing: border-box;
+            }
+
+            /* 头部样式 */
+            #trae-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+
+            #trae-minimize {
+                color: var(--text-primary);
+                width: 24px;
+                height: 24px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 16px;
+                background: var(--button-bg);
+                border: none;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            /* 控制按钮样式 */
+            #trae-toggle, #trae-theme, #trae-exit {
+                background: var(--button-bg);
+                border: var(--button-border);
+                color: var(--text-primary);
+                padding: 8px 12px;
+                margin: 2px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                transition: all 0.2s ease;
+            }
+
+            #trae-exit {
+                border-color: var(--warning);
+                color: var(--warning);
+            }
+
+            /* 状态图标 */
+            #trae-status-icon {
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                margin-right: 8px;
+            }
+
+            #trae-title {
+                font-weight: bold;
+                user-select: none;
+            }
+
+            /* 配置区域样式 */
+            #trae-controls {
+                display: block;
+            }
+
+            #trae-controls > div:first-child {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                gap: 30px;
+                margin-bottom: 15px;
+            }
+
+            /* 配置选项 */
+            #trae-controls > div > div:last-child {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            #trae-controls > div > div:last-child > div {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            #trae-controls span {
+                font-size: 10px;
+                color: var(--text-tertiary);
+            }
+
+            #trae-enable-delete {
+                width: 11px;
+                height: 11px;
+                margin: 0;
+                accent-color: var(--info);
+            }
+
+            #trae-click-limit {
+                width: 35px;
+                padding: 2px 4px;
+                border-radius: 2px;
+                font-size: 11px;
+                border: 1px solid var(--input-border);
+                outline: none;
+                text-align: center;
+                background: var(--input-bg);
+                color: var(--text-primary);
+            }
+
+            /* 抽屉样式 */
+            #trae-log-drawer, #trae-command-drawer {
+                margin-bottom: 15px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+                overflow: hidden;
+                background: var(--bg-secondary);
+            }
+
+            #trae-log-toggle, #trae-command-toggle {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 12px;
+                cursor: pointer;
+                transition: background-color 0.2s ease;
+                user-select: none;
+                background: var(--bg-primary);
+                color: var(--text-primary);
+            }
+
+            #trae-log-toggle:hover, #trae-command-toggle:hover {
+                background-color: var(--bg-tertiary);
+            }
+
+            #trae-log-content, #trae-command-content {
+                display: none;
+                border-top: 1px solid var(--border-color);
+                background: var(--bg-primary);
+            }
+
+            #trae-log-content {
+                max-height: 150px;
+                overflow-y: auto;
+            }
+
+            /* 日志样式 */
+            #trae-log-list {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                width: 100%;
+                padding: 8px;
+                font-size: 11px;
+                font-family: 'Monaco', 'Menlo', monospace;
+            }
+
+            .log-item {
+                display: flex;
+                text-align: left;
+                width: 100%;
+                gap: 8px;
+                margin-bottom: 6px;
+                padding: 4px 6px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+
+            .log-item.success { color: var(--success); }
+            .log-item.warning { color: var(--warning); }
+            .log-item.info { color: var(--text-tertiary); }
+            .log-item .log-time { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; min-width: 50px; }
+            .log-item .log-text { flex: 1; line-height: 1.4; }
+
+            /* 命令输入区域 */
+            #trae-command-input-area {
+                margin-bottom: 15px;
+                border-radius: 8px;
+                border: 1px solid var(--border-color);
+                background: var(--bg-primary);
+                overflow: hidden;
+                padding: 12px 16px;
+                display: flex;
+                gap: 8px;
+                align-items: stretch;
+            }
+
+            #trae-command-input-area > textarea {
+                flex: 1;
+                min-width: 0;
+            }
+
+            #trae-command-input {
+                height: 60px;
+                padding: 12px;
+                border-radius: 6px;
+                font-size: 13px;
+                border: 2px solid var(--input-border);
+                outline: none;
+                transition: border-color 0.2s ease;
+                background: var(--input-bg);
+                color: var(--text-primary);
+                resize: none;
+                font-family: inherit;
+                line-height: 1.4;
+                overflow: hidden;
+                box-sizing: border-box;
+            }
+
+            #trae-command-input:focus {
+                border-color: var(--info);
+                background: var(--input-bg);
+                box-shadow: 0 0 0 3px rgba(64, 150, 255, 0.1);
+            }
+
+            #trae-add-command {
+                background: var(--info);
+                color: white;
+                padding: 8px 12px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: 600;
+                border: none;
+                box-shadow: 0 2px 8px rgba(64, 150, 255, 0.3);
+                transition: all 0.2s ease;
+                font-size: 12px;
+                min-width: 40px;
+                height: 60px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
+
+            #trae-add-command:hover {
+                background: #3a8ee6;
+                transform: scale(0.95);
+            }
+
+            #trae-add-command:active {
+                transform: scale(0.9);
+            }
+
+            #trae-add-command:disabled {
+                background: #c0c4cc;
+                cursor: not-allowed;
+                box-shadow: none;
+            }
+
+            /* 命令列表 */
+            #trae-command-list {
+                max-height: 200px;
+                overflow-y: auto;
+                background: var(--bg-primary);
+                border-top: 1px solid var(--border-color);
+            }
+
+            #trae-command-items {
+                padding: 12px 16px;
+            }
+
+            .command-item {
+                background: var(--command-bg);
+                border: 1px solid var(--command-border);
+                border-radius: 6px;
+                padding: 8px;
+                margin-bottom: 6px;
+                transition: background-color 0.2s ease;
+                position: relative;
+                cursor: default;
+            }
+
+            .command-item:hover {
+                background: var(--bg-tertiary);
+            }
+
+            .command-item.completed {
+                opacity: 0.6;
+            }
+
+            .command-item.completed .command-text {
+                color: var(--text-tertiary);
+                text-decoration: line-through;
+            }
+
+            .command-item .drag-handle {
+                position: absolute;
+                left: 4px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--text-tertiary);
+                cursor: grab;
+                font-size: 10px;
+                user-select: none;
+                -webkit-user-select: none;
+                padding: 2px;
+                border-radius: 2px;
+                z-index: 10;
+            }
+
+            .command-item .drag-handle:hover {
+                background: rgba(64, 150, 255, 0.1);
+                color: var(--info);
+            }
+
+            .command-item .drag-handle:active {
+                cursor: grabbing;
+            }
+
+            .command-item .command-status {
+                margin-left: 20px;
+                margin-right: 8px;
+                font-size: 10px;
+            }
+
+            .command-item .command-text {
+                flex: 1;
+                margin-right: 20px;
+                font-size: 11px;
+                word-break: break-word;
+                cursor: text;
+                user-select: text;
+                -webkit-user-select: text;
+                -moz-user-select: text;
+                -ms-user-select: text;
+            }
+
+            .command-item .command-delete {
+                position: absolute;
+                right: 6px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--warning);
+                cursor: pointer;
+                font-size: 12px;
+                padding: 2px;
+                border-radius: 2px;
+            }
+
+            .command-item .command-delete:hover {
+                background: rgba(231, 76, 60, 0.1);
+            }
+
+            /* 最小化状态 */
+            #trae-minimized-content {
+                display: none;
+                justify-content: space-between;
+                align-items: center;
+                width: 100%;
+            }
+
+            #trae-minimized-title {
+                font-weight: bold;
+                user-select: none;
+                font-size: 12px;
+            }
+
+            #trae-queue-status {
+                font-size: 10px;
+                color: var(--text-tertiary);
+            }
+
+            #trae-status-icon-minimized {
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                margin-right: 8px;
+            }
+
+            /* 动画效果 */
+            @keyframes fadeUp {
+                0% { opacity: 0; transform: translateY(0); }
+                30% { opacity: 1; transform: translateY(-5px); }
+                100% { opacity: 0; transform: translateY(-30px); }
+            }
+
+            /* 滚动条样式 */
+            #trae-panel ::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            #trae-panel ::-webkit-scrollbar-track {
+                background: var(--bg-secondary);
+                border-radius: 3px;
+            }
+
+            #trae-panel ::-webkit-scrollbar-thumb {
+                background: var(--border-color);
+                border-radius: 3px;
+                opacity: 0.6;
+            }
+
+            #trae-panel ::-webkit-scrollbar-thumb:hover {
+                background: var(--info);
+                opacity: 1;
+            }
+
+            /* 拖拽时的样式 */
+            .dragging {
+                opacity: 0.5;
+            }
+
+            .drag-over {
+                border: 2px dashed var(--info) !important;
+                background: rgba(64, 150, 255, 0.1) !important;
+            }
+
+            #trae-panel #trae-log-content::-webkit-scrollbar {
+                width: 6px;
+            }
+            #trae-panel #trae-log-content::-webkit-scrollbar-track {
+                background: #f5f5f5;
+                border-radius: 3px;
+            }
+            #trae-panel #trae-log-content::-webkit-scrollbar-thumb {
+                background: #e0e0e0;
+                border-radius: 3px;
+                opacity: 0.6;
+            }
+            #trae-panel #trae-log-content::-webkit-scrollbar-thumb:hover {
+                background: #4096ff;
+                opacity: 1;
+            }
+            #trae-panel #trae-command-list::-webkit-scrollbar {
+                width: 6px;
+            }
+            #trae-panel #trae-command-list::-webkit-scrollbar-track {
+                background: #f8f9fa;
+                border-radius: 3px;
+            }
+            #trae-panel #trae-command-list::-webkit-scrollbar-thumb {
+                background: #e0e0e0;
+                border-radius: 3px;
+                opacity: 0.6;
+            }
+            #trae-panel #trae-command-list::-webkit-scrollbar-thumb:hover {
+                background: #4096ff;
+                opacity: 1;
+            }
+            #trae-panel #trae-add-command:hover:not(:disabled) {
+                background: #3a8ee6;
+                transform: scale(0.95);
+            }
+            #trae-panel #trae-add-command:active:not(:disabled) {
+                transform: scale(0.9);
+            }
+            #trae-panel #trae-add-command:not(:disabled) {
+                background: #4096ff;
+                cursor: pointer;
+                box-shadow: 0 2px 8px rgba(64, 150, 255, 0.3);
+            }
+            #trae-panel #trae-add-command:disabled {
+                background: #c0c4cc;
+                cursor: not-allowed;
+                box-shadow: none;
+            }
+            #trae-panel #trae-command-input:focus {
+                outline: none;
+                border-color: var(--info);
+                background: var(--input-bg);
+                box-shadow: 0 0 0 3px rgba(64, 150, 255, 0.1);
+            }
+            #trae-panel #trae-command-input {
+                resize: none !important;
+                min-height: 60px !important;
+                max-height: 60px !important;
+                height: 60px !important;
+            }
+            .log-item {
+                display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; padding: 4px 6px; border-radius: 4px; font-size: 11px;
+            }
+            .log-item.success { color: #67c23a; }
+            .log-item.warning { color: #e6a23c; }
+            .log-item.info { color: #909399; }
+            .log-item .log-time { color: #8c8c8c; font-size: 10px; white-space: nowrap; min-width: 50px; }
+            .log-item .log-text { flex: 1; line-height: 1.4; }
+            .command-item {
+                background: #34495e; border-radius: 6px; padding: 8px; margin-bottom: 6px; transition: background-color 0.2s ease; position: relative; cursor: default;
+            }
+            .command-item:hover {
+                background: #2c3e50;
+            }
+            .command-item.completed {
+                opacity: 0.6;
+            }
+            .command-item.completed .command-text {
+                color: #8c8c8c;
+                text-decoration: line-through;
+            }
+            .command-item .drag-handle {
+                position: absolute; left: 4px; top: 50%; transform: translateY(-50%); color: #c0c4cc; cursor: grab; font-size: 10px; user-select: none; -webkit-user-select: none; padding: 2px; border-radius: 2px; z-index: 10;
+            }
+            .command-item .drag-handle:hover {
+                background: rgba(64, 150, 255, 0.1);
+                color: #4096ff;
+            }
+            .command-item .drag-handle:active {
+                cursor: grabbing;
+            }
+            .command-item .command-status {
+                margin-left: 20px; margin-right: 8px; font-size: 10px; color: #ffffff;
+            }
+            .command-item .command-text {
+                flex: 1; margin-right: 20px; font-size: 11px; word-break: break-word; cursor: text; user-select: text; -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; color: #ffffff;
+            }
+            .command-item .command-delete {
+                position: absolute; right: 6px; top: 50%; transform: translateY(-50%); color: #f56c6c; cursor: pointer; font-size: 12px; padding: 2px; border-radius: 2px;
+            }
+            .command-item .command-delete:hover {
+                background: #fee;
+            }
+        `;
+        document.head.appendChild(style);
 
         const header = document.getElementById('trae-header');
         const minimizeBtn = document.getElementById('trae-minimize');
@@ -455,6 +1583,93 @@
         const themeBtn = document.getElementById('trae-theme');
         const limitInput = document.getElementById('trae-click-limit');
         const deleteCheckbox = document.getElementById('trae-enable-delete');
+        const commandInput = document.getElementById('trae-command-input');
+        const addCommandBtn = document.getElementById('trae-add-command');
+        const logToggle = document.getElementById('trae-log-toggle');
+        const logContent = document.getElementById('trae-log-content');
+        const logArrow = document.getElementById('trae-log-arrow');
+        const commandToggle = document.getElementById('trae-command-toggle');
+        const commandContent = document.getElementById('trae-command-content');
+        const commandArrow = document.getElementById('trae-command-arrow');
+
+        // 抽屉日志自动收起逻辑
+        let logCollapseTimer = null;
+        let isLogExpanded = false;
+
+        // 命令管理折叠状态
+        let isCommandExpanded = false;
+
+        function collapseLog() {
+            if (isLogExpanded) {
+                logContent.style.display = 'none';
+                logArrow.style.transform = 'rotate(0deg)';
+                isLogExpanded = false;
+            }
+        }
+
+        function expandLog() {
+            if (!isLogExpanded) {
+                logContent.style.display = 'block';
+                logArrow.style.transform = 'rotate(90deg)';
+                isLogExpanded = true;
+
+                // 重置自动收起计时器
+                if (logCollapseTimer) {
+                    clearTimeout(logCollapseTimer);
+                }
+                logCollapseTimer = setTimeout(() => {
+                    collapseLog();
+                }, 5000);
+            }
+        }
+
+        // 命令管理折叠逻辑
+        function collapseCommand() {
+            if (isCommandExpanded) {
+                commandContent.style.display = 'none';
+                commandArrow.style.transform = 'rotate(0deg)';
+                isCommandExpanded = false;
+            }
+        }
+
+        function expandCommand() {
+            if (!isCommandExpanded) {
+                commandContent.style.display = 'block';
+                commandArrow.style.transform = 'rotate(90deg)';
+                isCommandExpanded = true;
+            }
+        }
+
+        // 日志抽屉点击事件
+        logToggle.addEventListener('click', () => {
+            if (isLogExpanded) {
+                collapseLog();
+                if (logCollapseTimer) {
+                    clearTimeout(logCollapseTimer);
+                }
+            } else {
+                expandLog();
+            }
+        });
+
+        // 命令管理抽屉点击事件
+        commandToggle.addEventListener('click', () => {
+            if (isCommandExpanded) {
+                collapseCommand();
+            } else {
+                expandCommand();
+            }
+        });
+
+        // 点击外部区域收起日志
+        document.addEventListener('click', (e) => {
+            if (isLogExpanded && !e.target.closest('#trae-log-drawer')) {
+                collapseLog();
+                if (logCollapseTimer) {
+                    clearTimeout(logCollapseTimer);
+                }
+            }
+        });
 
         header.addEventListener('click', e => !e.target.closest('button') && minimize());
         minimizeBtn.addEventListener('click', e => { e.stopPropagation(); minimize(); });
@@ -468,8 +1683,63 @@
         }
 
         if (deleteCheckbox) {
-            deleteCheckbox.addEventListener('change', e => { e.stopPropagation(); enableDelete = e.target.checked; log(`🗑️ 删除功能已<span style="color: #e74c3c; font-weight: bold;">${enableDelete ? '启用' : '禁用'}</span>`); });
+            deleteCheckbox.addEventListener('change', e => { e.stopPropagation(); enableDelete = e.target.checked; });
         }
+
+        if (commandInput) {
+            commandInput.addEventListener('keypress', e => {
+                if (e.key === 'Enter') {
+                    e.stopPropagation();
+                    addCommand();
+                }
+            });
+        }
+
+        if (addCommandBtn) {
+            addCommandBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                addCommand();
+            });
+        }
+
+        // 添加输入框内容监听，控制发送按钮状态
+        function updateSendButtonState() {
+            const input = document.getElementById('trae-command-input');
+            const sendButton = document.getElementById('trae-add-command');
+            if (input && sendButton) {
+                const hasContent = input.value.trim().length > 0;
+                sendButton.disabled = !hasContent;
+
+                // 根据是否有内容更新按钮颜色和样式
+                if (hasContent) {
+                    // 有内容时显示蓝色可点击状态
+                    sendButton.style.background = '#4096ff';
+                    sendButton.style.cursor = 'pointer';
+                    sendButton.style.boxShadow = '0 2px 8px rgba(64, 150, 255, 0.3)';
+                } else {
+                    // 无内容时显示灰色不可点击状态
+                    sendButton.style.background = '#c0c4cc';
+                    sendButton.style.cursor = 'not-allowed';
+                    sendButton.style.boxShadow = 'none';
+                }
+            }
+        }
+
+        if (commandInput) {
+            commandInput.addEventListener('input', updateSendButtonState);
+            commandInput.addEventListener('keyup', updateSendButtonState);
+            commandInput.addEventListener('paste', function() {
+                // 粘贴后延迟检查，确保内容已粘贴
+                setTimeout(updateSendButtonState, 10);
+            });
+            commandInput.addEventListener('cut', function() {
+                // 剪切后延迟检查，确保内容已剪切
+                setTimeout(updateSendButtonState, 10);
+            });
+        }
+
+        // 初始化按钮状态
+        updateSendButtonState();
 
         updateMinimizeButton(false);
         applyTheme();
@@ -511,6 +1781,75 @@
         log('✨ 支持功能: 自动点击继续、运行、接受按钮' + (enableDelete ? '、<span style="color: #e74c3c; font-weight: bold;">删除按钮</span>' : ''));
     }
     
+    // 暴露函数到全局作用域以供HTML onclick事件使用
+    window.addCommand = addCommand;
+    window.removeCommand = removeCommand;
+
+    // 拖拽处理函数 - 只在拖拽图标上触发
+    window.handleCommandDragStart = function(event, commandId) {
+        isCommandDragging = true;
+        draggedCommand = commands.find(cmd => cmd.id === commandId);
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/html', event.target.innerHTML);
+        event.dataTransfer.setData('commandId', commandId);
+
+        // 只让拖拽图标变透明，不是整个命令项
+        event.target.style.opacity = '0.5';
+
+        // 阻止事件冒泡，避免触发父元素的事件
+        event.stopPropagation();
+    };
+
+    window.handleCommandDragOver = function(event) {
+        if (event.preventDefault) {
+            event.preventDefault();
+        }
+        event.dataTransfer.dropEffect = 'move';
+        return false;
+    };
+
+    window.handleCommandDrop = function(event, targetCommandId) {
+        if (event.stopPropagation) {
+            event.stopPropagation();
+        }
+
+        if (isCommandDragging && draggedCommand) {
+            const targetIndex = commands.findIndex(cmd => cmd.id === targetCommandId);
+            const draggedIndex = commands.findIndex(cmd => cmd.id === draggedCommand.id);
+
+            if (targetIndex !== -1 && draggedIndex !== -1 && targetIndex !== draggedIndex) {
+                // 只能移动待执行的命令
+                if (draggedCommand.status === 'pending') {
+                    const targetCommand = commands[targetIndex];
+                    // 只能移动到待执行的命令位置
+                    if (targetCommand.status === 'pending') {
+                        // 重新排序命令
+                        commands.splice(draggedIndex, 1);
+                        commands.splice(targetIndex, 0, draggedCommand);
+                        updateCommandList();
+
+                        const commandText = draggedCommand.text.length > 15 ?
+                            draggedCommand.text.substring(0, 15) + '...' :
+                            draggedCommand.text;
+                        log(`🔄 已拖拽移动命令 "${commandText}"`);
+                    }
+                }
+            }
+        }
+
+        return false;
+    };
+
+    window.handleCommandDragEnd = function(event) {
+        isCommandDragging = false;
+        draggedCommand = null;
+
+        // 恢复拖拽图标的透明度
+        if (event.target) {
+            event.target.style.opacity = '';
+        }
+    };
+
     window.traeAutoAccept = {
         start, stop, toggle,
         click: findAndClick, destroy, exit: destroy,
@@ -518,7 +1857,24 @@
         setClickLimit: updateClickLimit,
         getClickCount: () => clickCount,
         getClickLimit: () => clickLimit,
-        simulateClickAnimation: () => showClickAnimation(true)
+        simulateClickAnimation: () => showClickAnimation(true),
+        // 命令队列功能
+        addCommand: (command) => {
+            commands.push({
+                id: Date.now(),
+                text: command,
+                status: 'pending'
+            });
+            updateCommandList();
+            log(`✅ 已添加命令: ${command}`);
+        },
+        removeCommand: (id) => removeCommand(id),
+                getCommands: () => commands,
+        clearCommands: () => {
+            commands = [];
+            updateCommandList();
+            log('🗑️ 已清空所有命令');
+        }
     };
 
     createPanel();
@@ -535,6 +1891,13 @@
     console.log('   - traeAutoAccept.getClickLimit() // 获取点击限制');
     console.log('   - traeAutoAccept.simulateClickAnimation() // 模拟+1动画效果');
     console.log('');
+    console.log('💡 命令队列功能:');
+    console.log('   - traeAutoAccept.addCommand("命令内容") // 添加命令');
+    console.log('   - traeAutoAccept.removeCommand(id) // 删除命令');
+    console.log('   - traeAutoAccept.startCommandQueue() // 启动命令队列');
+    console.log('   - traeAutoAccept.stopCommandQueue() // 停止命令队列');
+    console.log('   - traeAutoAccept.getCommands() // 获取所有命令');
+    console.log('   - traeAutoAccept.clearCommands() // 清空所有命令');
     console.log('💡 控制台将在10秒后关闭');
 
 })();
