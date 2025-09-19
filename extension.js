@@ -73,8 +73,8 @@ function activate(context) {
 
 function copyBrowserScriptToClipboard(context) {
     try {
-        // 获取 trae-browser-script.js 文件路径
-        const scriptPath = path.join(context.extensionPath, 'trae-browser-script.js');
+        // 获取 trae-browser-script-min.js 文件路径
+        const scriptPath = path.join(context.extensionPath, 'trae-browser-script-min.js');
         
         // 读取文件内容
         const scriptContent = fs.readFileSync(scriptPath, 'utf8');
@@ -82,8 +82,8 @@ function copyBrowserScriptToClipboard(context) {
         // 复制到剪贴板
         vscode.env.clipboard.writeText(scriptContent);
         
-        vscode.window.showInformationMessage('📋 浏览器脚本已复制到剪贴板，请在浏览器控制台中运行');
-        outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] 📋 浏览器脚本已复制到剪贴板`);
+        vscode.window.showInformationMessage('📋 浏览器脚本（压缩版）已复制到剪贴板，请在浏览器控制台中运行');
+        outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] 📋 浏览器脚本（压缩版）已复制到剪贴板`);
         
         // 打开开发人员工具
         setTimeout(() => {
@@ -97,8 +97,8 @@ function copyBrowserScriptToClipboard(context) {
         }, 500);
     } catch (error) {
         console.error('复制脚本到剪贴板失败:', error);
-        outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] ❌ 复制脚本到剪贴板失败: ${error.message}`);
-        vscode.window.showErrorMessage(`复制脚本到剪贴板失败: ${error.message}`);
+        outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] ❌ 复制脚本（压缩版）到剪贴板失败: ${error.message}`);
+        vscode.window.showErrorMessage(`复制脚本（压缩版）到剪贴板失败: ${error.message}`);
     }
 }
 

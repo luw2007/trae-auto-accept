@@ -1076,7 +1076,7 @@ let isCommandDragging = false, draggedCommand = null;
                 margin-bottom: 10px;
             }
 
-            #trae-minimize {
+            #trae-minimize, #trae-minimize-minimized {
                 color: var(--text-primary);
                 width: 24px;
                 height: 24px;
@@ -1084,10 +1084,16 @@ let isCommandDragging = false, draggedCommand = null;
                 cursor: pointer;
                 font-size: 16px;
                 background: var(--button-bg);
-                border: none;
+                border: 1px solid var(--border-color);
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                transition: all 0.2s ease;
+            }
+
+            #trae-minimize:hover, #trae-minimize-minimized:hover {
+                background: var(--bg-tertiary);
+                border-color: var(--text-secondary);
             }
 
             /* 控制按钮样式 */
@@ -1220,20 +1226,29 @@ let isCommandDragging = false, draggedCommand = null;
 
             .log-item {
                 display: flex;
-                text-align: left;
+                text-align: left !important;
+                align-items: flex-start !important;
+                justify-content: flex-start !important;
                 width: 100%;
                 gap: 8px;
                 margin-bottom: 6px;
                 padding: 4px 6px;
                 border-radius: 4px;
                 font-size: 11px;
+                direction: ltr;
             }
 
             .log-item.success { color: var(--success); }
             .log-item.warning { color: var(--warning); }
             .log-item.info { color: var(--text-tertiary); }
             .log-item .log-time { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; min-width: 50px; }
-            .log-item .log-text { flex: 1; line-height: 1.4; }
+            .log-item .log-text {
+                flex: 1;
+                line-height: 1.4;
+                text-align: left !important;
+                align-self: flex-start;
+                word-break: break-word;
+            }
 
             /* 命令输入区域 */
             #trae-command-input-area {

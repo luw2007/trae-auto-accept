@@ -1,12 +1,43 @@
+# VS Code specific
 .vscode/**
 .vscode-test/**
+
+# Source files
 src/**
-.gitignore
-.yarnrc
-vsc-extension-quickstart.md
-log/**
-docs/**
 **/tsconfig.json
 **/.eslintrc.json
 **/*.map
 **/*.ts
+
+# Build artifacts
+node_modules/
+*.log
+*.tgz
+
+# Documentation and examples
+docs/**
+vsc-extension-quickstart.md
+
+# Test files
+*-test.*
+test-*
+*.test.js
+*.test.html
+test-report.json
+
+# Temporary files
+*.tmp
+*.temp
+
+# Original scripts (only minified version is packaged)
+trae-browser-script.js
+
+# Development files
+.gitignore
+.yarnrc
+README.md
+CLAUDE.md
+RELEASE.md
+VE.md
+build.sh
+install.sh
