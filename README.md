@@ -82,12 +82,13 @@
 
 ### 🆕 异步命令队列功能
 
-- **添加命令**：在输入框中输入命令，按回车或点击"发送"按钮
+- **添加命令**：在输入框中输入命令，按Ctrl+Enter（Windows/Linux）或Cmd+Enter（macOS）组合键，或点击"发送"按钮
+- **安全提交**：防止误触回车键提交，仅支持组合键提交方式
 - **自动执行**：命令自动与 TraeCN 运行状态同步，避免冲突
 - **智能等待**：检测 TraeCN 状态，等待合适的执行时机
 - **命令管理**：支持拖拽排序、删除、状态监控
-- **实时状态**：显示命令执行状态（待执行→、执行中⏳、已完成✅）
-- **队列计数**：实时显示队列中命令数量和执行状态
+- **实时状态**：显示命令执行状态（待执行→、执行中⏳、已提交✅）
+- **队列计数**：实时显示队列中命令数量和执行状态，标题显示格式为"(已提交数/总数)"
 - **历史记录**：操作日志记录所有命令执行情况
 
 ## 🎮 插件脚本功能
@@ -108,6 +109,8 @@
 - **拖拽移动**：可拖动到任意位置
 - **状态指示**：彩色圆点显示运行状态
 - **安全控制**：删除功能默认禁用，需要用户主动启用
+- **直观计数**：标题计数显示格式为"(已提交数/总数)"，更加直观
+- **清晰提示**：最小化状态下显示"已提交"而非"待执行"，避免混淆
 
 ## 🔧 故障排除
 
@@ -164,28 +167,91 @@ trae-auto-accept/
 - Node.js 14+
 - VS Code 1.74.0+
 - @vscode/vsce
+- make (可选，用于自动化构建)
+
+### 构建工具选择
+本项目采用以下工具链进行构建和压缩：
+
+1. **JavaScript压缩工具**：自定义minify-script.js
+   - 功能：移除注释、压缩空格、保护字符串内容
+   - 优势：轻量级、可定制、无外部依赖
+   - 压缩率：约35%（73511 bytes → 47690 bytes）
+
+2. **构建系统**：GNU Make + Shell脚本
+   - 主构建：Makefile统一管理构建流程
+   - 发布构建：build-release.sh自动处理压缩和打包
+   - 开发构建：build.sh快速打包测试版本
+
+3. **打包工具**：@vscode/vsce
+   - 官方VS Code扩展打包工具
+   - 支持.vsix格式，兼容VS Code Marketplace
 
 ### 构建命令
+
+#### 标准构建流程
+```bash
+# 完整构建（推荐）
+make build
+
+# 单独压缩JavaScript
+make minify
+
+# 清理构建产物
+make clean
+
+# 安装依赖
+make install-deps
+```
+
+#### 手动构建流程
 ```bash
 # 安装打包工具
 npm install -g @vscode/vsce
 
-# 打包扩展
-vsce package --out trae-auto-accept.vsix
+# 压缩JavaScript文件
+node minify-script.js
 
-# 或使用构建脚本
-chmod +x build.sh
+# 打包扩展
+make build-release
+# 或
+./build-release.sh
+```
+
+#### 开发构建
+```bash
+# 快速打包测试版本
 ./build.sh
+
+# 或使用make
+make dev
+```
+
+### 构建产物
+- `trae-browser-script-min.js`：压缩后的浏览器脚本（~47KB）
+- `trae-auto-accept.vsix`：VS Code扩展安装包（~46KB）
+- 构建日志：显示压缩率和文件统计信息
+
+### 文件结构
+```
+trae-auto-accept/
+├── Makefile                  # 构建系统配置
+├── minify-script.js          # JavaScript压缩工具
+├── build-release.sh          # 发布构建脚本
+├── build.sh                  # 开发构建脚本
+├── trae-browser-script.js    # 原始浏览器脚本
+├── trae-browser-script-min.js # 压缩后脚本
+├── trae-auto-accept.vsix     # 最终扩展包
+└── ...
 ```
 
 ## 📊 版本信息
 
-### 当前版本 v1.12.4
-- 🗑️ 新增删除按钮支持功能
-- 🎨 重新设计界面布局，优化用户体验
-- 🔴 删除功能使用红色警示字体
-- 🛡️ 添加删除功能安全确认机制
-- 📦 版本升级到v1.12.4
+### 当前版本 v1.13.0
+- 🔄 优化标题计数显示方式，将"(1/2)"中的"1"从待执行数量改为成功数量
+- 📝 修改最小化提示文字，从"待执行"改为"已提交"，使显示更加直观
+- 🛡️ 修复回车提交代码问题，防止误触提交，支持Ctrl+Enter（Windows/Linux）和Cmd+Enter（macOS）提交方式
+- 🎨 改进用户界面交互体验，优化控制面板显示逻辑
+- 📦 版本升级到v1.13.0
 
 ### v1.12.2
 - 📝 完善 CLAUDE.md 开发指导文档
