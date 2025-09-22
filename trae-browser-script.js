@@ -8,6 +8,12 @@
     let clickLimit = 5, clickCount = 0;
     let enableDelete = false;
     let commands = [];
+    const PANEL_SIZES = [
+        { width: 360, logMax: 140, commandMax: 200 },
+        { width: 420, logMax: 180, commandMax: 240 },
+        { width: 540, logMax: 240, commandMax: 320 }
+    ];
+    let panelSizeIndex = 1;
 
     // 简洁的主题系统 - 使用CSS变量
     const THEMES = {
@@ -275,33 +281,32 @@
         const pendingCount = commands.filter(cmd => cmd.status === 'pending').length;
         countContainer.textContent = `${commands.length} 个命令`;
 
-        commands.forEach((command, index) => {
+        commands.forEach((command) => {
             const commandItem = document.createElement('div');
+            const isPending = command.status === 'pending';
             commandItem.className = `command-item ${command.status === 'completed' ? 'completed' : ''}`;
+            commandItem.dataset.commandId = command.id;
 
             const statusIcon = command.status === 'completed' ? '✅' :
                 command.status === 'executing' ? '⏳' : '→';
 
             commandItem.innerHTML = `
-                <span class="drag-handle" style="display: ${command.status === 'pending' ? 'block' : 'none'};" draggable="true" data-command-id="${command.id}">⋮⋮</span>
+                <span class="drag-handle" style="display: ${isPending ? 'flex' : 'none'};" data-command-id="${command.id}" title="拖拽排序" draggable="${isPending}">⋮⋮</span>
                 <span class="command-status">${statusIcon}</span>
-                <span class="command-text" style="cursor: text; user-select: text;">${command.text}</span>
+                <span class="command-text">${command.text}</span>
                 <span class="command-delete" onclick="removeCommand(${command.id})" title="删除">×</span>
             `;
 
-            // 只有待执行的命令才能拖拽，但只在拖拽图标上触发
-            if (command.status === 'pending') {
+            if (isPending) {
                 const dragHandle = commandItem.querySelector('.drag-handle');
-                dragHandle.ondragstart = (e) => handleCommandDragStart(e, command.id);
-                dragHandle.ondragend = handleCommandDragEnd;
-                dragHandle.ondragover = handleCommandDragOver;
-                dragHandle.ondrop = (e) => handleCommandDrop(e, command.id);
+                if (dragHandle) {
+                    dragHandle.addEventListener('dragstart', (e) => handleCommandDragStart(e, command.id));
+                    dragHandle.addEventListener('dragend', handleCommandDragEnd);
+                }
 
-                // 只在拖拽图标上显示拖拽光标，文本区域保持正常
-                dragHandle.style.cursor = 'grab';
-                dragHandle.dataset.commandId = command.id;
-
-                commandItem.dataset.commandId = command.id;
+                commandItem.addEventListener('dragover', handleCommandDragOver);
+                commandItem.addEventListener('dragleave', handleCommandDragLeave);
+                commandItem.addEventListener('drop', (e) => handleCommandDrop(e, command.id));
             }
 
             listContainer.appendChild(commandItem);
@@ -586,22 +591,25 @@
 
     function findAndClick() {
         try {
-            // 首先检查是否有待执行的命令
-            const pendingCommands = commands.filter(cmd => cmd.status === 'pending');
-            if (pendingCommands.length > 0) {
-                // 尝试执行命令队列
-                if (processNextCommandInQueue()) {
-                    return true;
-                }
-            }
-
-            // 如果没有命令或命令执行失败，执行原来的点击逻辑
+            // 优先处理自动化按钮，避免命令队列与界面提示冲突
             for (const config of BUTTON_CONFIGS) {
                 const button = findButton(config);
                 if (button) {
                     return clickButton(button, config.name);
                 }
             }
+
+            // 如果仍有命令执行中，等待其完成
+            const executingCommand = commands.find(cmd => cmd.status === 'executing');
+            if (executingCommand) {
+                return false;
+            }
+
+            const pendingCommands = commands.filter(cmd => cmd.status === 'pending');
+            if (pendingCommands.length > 0) {
+                return processNextCommandInQueue();
+            }
+
             return false;
         } catch (error) {
             log(`❌ 错误: ${error.message}`);
@@ -884,10 +892,10 @@
             controls.style.display = 'block';
             header.style.display = 'flex';
             minimizedContent.style.display = 'none';
-            panel.style.padding = '15px';
-            panel.style.minWidth = '350px';
-            panel.style.width = 'auto';
-            panel.style.maxWidth = '500px';
+            panel.style.padding = '';
+            panel.style.removeProperty('min-width');
+            panel.style.removeProperty('width');
+            panel.style.removeProperty('max-width');
             title.style.display = 'block';
             minimizedTitle.style.display = 'none';
             panel.style.removeProperty('display');
@@ -895,12 +903,16 @@
             panel.style.removeProperty('justify-content');
             updateMinimizeButton(false);
             applyTheme();
+            applyPanelSize();
+            updateSizeControls();
         } else {
             controls.style.display = 'none';
             header.style.display = 'none';
             minimizedContent.style.display = 'flex';
             panel.style.padding = '8px 12px';
             panel.style.minWidth = 'auto';
+            panel.style.width = 'auto';
+            panel.style.maxWidth = 'auto';
             title.style.display = 'none';
             minimizedTitle.style.display = 'block';
             panel.style.display = 'flex';
@@ -924,6 +936,47 @@
         console.log('🔚 TraeCN 自动操作已完全退出');
     }
 
+    function applyPanelSize() {
+        const panel = document.getElementById('trae-panel');
+        if (!panel) return;
+
+        const size = PANEL_SIZES[panelSizeIndex] || PANEL_SIZES[0];
+        panel.style.width = `${size.width}px`;
+        panel.style.setProperty('--log-list-max-height', `${size.logMax}px`);
+        panel.style.setProperty('--command-list-max-height', `${size.commandMax}px`);
+    }
+
+    function updateSizeControls() {
+        const enlargeBtn = document.getElementById('trae-size-increase');
+        const shrinkBtn = document.getElementById('trae-size-decrease');
+        if (!enlargeBtn || !shrinkBtn) return;
+
+        enlargeBtn.disabled = panelSizeIndex >= PANEL_SIZES.length - 1;
+        shrinkBtn.disabled = panelSizeIndex <= 0;
+    }
+
+    function increasePanelSize() {
+        if (panelSizeIndex < PANEL_SIZES.length - 1) {
+            panelSizeIndex += 1;
+            applyPanelSize();
+            updateSizeControls();
+            log(`🔍 面板放大至 ${PANEL_SIZES[panelSizeIndex].width}px`);
+        } else {
+            log('⚠️ 已达到最大面板尺寸');
+        }
+    }
+
+    function decreasePanelSize() {
+        if (panelSizeIndex > 0) {
+            panelSizeIndex -= 1;
+            applyPanelSize();
+            updateSizeControls();
+            log(`🔍 面板缩小至 ${PANEL_SIZES[panelSizeIndex].width}px`);
+        } else {
+            log('⚠️ 已达到最小面板尺寸');
+        }
+    }
+
     function createPanel() {
         if (document.getElementById('trae-panel')) {
             console.log('控制面板已存在');
@@ -944,16 +997,20 @@
                 </div>
                 <button id="trae-minimize-minimized" title="收起" style="margin-left: 8px;">－</button>
             </div>
-            <div id="trae-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <div style="display: flex; align-items: center;">
+            <div id="trae-header">
+                <div class="trae-header-left">
                     <div id="trae-status-icon" style="width: 16px; height: 16px; border-radius: 50%; margin-right: 8px;"></div>
                     <div id="trae-title" style="font-weight: bold; user-select: none;">Auto 0/∞<span class="trae-plus-placeholder"></span></div>
                 </div>
-                <button id="trae-minimize" title="收起">－</button>
+                <div id="trae-header-actions">
+                    <button id="trae-size-decrease" class="trae-header-button" title="缩小面板">A-</button>
+                    <button id="trae-size-increase" class="trae-header-button" title="放大面板">A+</button>
+                    <button id="trae-minimize" class="trae-header-button" title="收起">－</button>
+                </div>
             </div>
             <div id="trae-controls">
                 <!-- 功能入口和配置区域 -->
-                <div style="display: flex; justify-content: center; align-items: center; gap: 30px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: center; align-items: center; gap: 30px;">
                     <!-- 功能入口按钮组 -->
                     <div style="display: flex; gap: 8px;">
                         <button id="trae-toggle" style="background: transparent; color: var(--text-primary); padding: 10px 16px; margin: 2px; border-radius: 8px; cursor: pointer; font-weight: 600; border: none; transition: all 0.2s ease;">启动</button>
@@ -976,6 +1033,12 @@
                     </div>
                 </div>
 
+                <!-- 命令输入区域 - 始终可见 -->
+                <div id="trae-command-input-area">
+                    <textarea id="trae-command-input" placeholder="输入命令... 按 Ctrl+Enter 或 Cmd+Enter 提交" onkeydown="if((event.key==='Enter' && (event.ctrlKey || event.metaKey)) || (event.key==='Enter' && event.altKey)){event.preventDefault();addCommand();} else if(event.key==='Enter'){event.stopPropagation();}"></textarea>
+                    <button id="trae-add-command" disabled>发送</button>
+                </div>
+
                 <!-- 抽屉式操作日志 -->
                 <div id="trae-log-drawer">
                     <div id="trae-log-toggle">
@@ -988,12 +1051,6 @@
                     <div id="trae-log-content">
                         <div id="trae-log-list"></div>
                     </div>
-                </div>
-
-                <!-- 命令输入区域 - 始终可见 -->
-                <div id="trae-command-input-area">
-                    <textarea id="trae-command-input" placeholder="输入命令... 按 Ctrl+Enter 或 Cmd+Enter 提交" onkeydown="if((event.key==='Enter' && (event.ctrlKey || event.metaKey)) || (event.key==='Enter' && event.altKey)){event.preventDefault();addCommand();} else if(event.key==='Enter'){event.stopPropagation();}"></textarea>
-                    <button id="trae-add-command" disabled>发送</button>
                 </div>
 
                 <!-- 抽屉式命令列表区域 -->
@@ -1009,7 +1066,7 @@
 
                     <!-- 命令列表内容区域 -->
                     <div id="trae-command-content" style="display: none;">
-                        <div id="trae-command-list" style="max-height: 200px; overflow-y: auto; background: var(--bg-primary); border-top: 1px solid var(--border-color);" data-theme-bg="white" data-theme-border="#e0e0e0">
+                        <div id="trae-command-list" style="max-height: var(--command-list-max-height, 200px); overflow-y: auto; background: var(--bg-primary); border-top: 1px solid var(--border-color);" data-theme-bg="white" data-theme-border="#e0e0e0">
                             <div id="trae-command-items" style="padding: 12px 16px;"></div>
                         </div>
                     </div>
@@ -1017,10 +1074,26 @@
             </div>
         `;
 
-        panel.style.cssText = 'position:fixed;top:20px;right:20px;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-width:380px;max-width:420px;transition:all 0.3s ease;cursor:move;display:block;backdrop-filter:blur(10px);';
-
         document.body.appendChild(panel);
         updateMinimizedTitle();
+
+        const sizeIncreaseBtn = document.getElementById('trae-size-increase');
+        const sizeDecreaseBtn = document.getElementById('trae-size-decrease');
+
+        if (sizeIncreaseBtn) {
+            sizeIncreaseBtn.addEventListener('click', () => {
+                increasePanelSize();
+            });
+        }
+
+        if (sizeDecreaseBtn) {
+            sizeDecreaseBtn.addEventListener('click', () => {
+                decreasePanelSize();
+            });
+        }
+
+        applyPanelSize();
+        updateSizeControls();
 
         // 添加基础CSS样式 - 使用CSS变量
         const style = document.createElement('style');
@@ -1064,12 +1137,20 @@
                 border: var(--panel-border);
                 z-index: 999999;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                min-width: 380px;
-                max-width: 420px;
+                min-width: 340px;
+                max-width: 70vw;
+                width: 420px;
                 transition: all 0.3s ease;
-                cursor: move;
-                display: block;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
                 backdrop-filter: blur(10px);
+                max-height: 85vh;
+                overflow: hidden;
+            }
+
+            #trae-panel.trae-panel-dragging {
+                cursor: grabbing;
             }
 
             #trae-panel * {
@@ -1081,26 +1162,72 @@
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 10px;
+                gap: 12px;
+                margin-bottom: 6px;
+                cursor: grab;
+                user-select: none;
+            }
+
+            #trae-header:active {
+                cursor: grabbing;
+            }
+
+            .trae-header-left {
+                display: flex;
+                align-items: center;
+            }
+
+            #trae-header-actions {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .trae-header-button {
+                background: transparent;
+                border: 1px solid var(--border-color);
+                color: var(--text-primary);
+                padding: 4px 6px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 10px;
+                font-weight: 600;
+                transition: background-color 0.2s ease, color 0.2s ease;
+            }
+
+            .trae-header-button:hover:not(:disabled) {
+                background: var(--bg-tertiary);
+                color: var(--info);
+            }
+
+            .trae-header-button:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
             }
 
             #trae-minimize, #trae-minimize-minimized {
-                color: var(--text-primary);
-                width: 24px;
-                height: 24px;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 16px;
-                background: var(--button-bg);
-                border: none;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: all 0.2s ease;
             }
 
-            #trae-minimize:hover, #trae-minimize-minimized:hover {
+            #trae-minimize {
+                min-width: 32px;
+                min-height: 24px;
+            }
+
+            #trae-minimize-minimized {
+                background: transparent;
+                border: 1px solid var(--border-color);
+                border-radius: 6px;
+                padding: 4px 6px;
+                cursor: pointer;
+                transition: background-color 0.2s ease, color 0.2s ease;
+            }
+
+            #trae-minimize-minimized:hover {
                 background: var(--bg-tertiary);
+                color: var(--info);
             }
 
             /* 控制按钮样式 */
@@ -1140,7 +1267,9 @@
 
             /* 配置区域样式 */
             #trae-controls {
-                display: block;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
             }
 
             #trae-controls > div:first-child {
@@ -1148,7 +1277,6 @@
                 justify-content: center;
                 align-items: center;
                 gap: 30px;
-                margin-bottom: 15px;
             }
 
             /* 配置选项 */
@@ -1198,7 +1326,6 @@
 
             /* 抽屉样式 */
             #trae-log-drawer, #trae-command-drawer {
-                margin-bottom: 15px;
                 border-radius: 8px;
                 border: 1px solid var(--border-color);
                 overflow: hidden;
@@ -1228,7 +1355,7 @@
             }
 
             #trae-log-content {
-                max-height: 150px;
+                max-height: var(--log-list-max-height, 150px);
                 overflow-y: auto;
             }
 
@@ -1269,7 +1396,6 @@
 
             /* 命令输入区域 */
             #trae-command-input-area {
-                margin-bottom: 15px;
                 border-radius: 8px;
                 border: 1px solid var(--border-color);
                 background: var(--bg-primary);
@@ -1344,7 +1470,7 @@
 
             /* 命令列表 */
             #trae-command-list {
-                max-height: 200px;
+                max-height: var(--command-list-max-height, 200px);
                 overflow-y: auto;
                 background: var(--bg-primary);
                 border-top: 1px solid var(--border-color);
@@ -1358,11 +1484,13 @@
                 background: var(--command-bg);
                 border: 1px solid var(--command-border);
                 border-radius: 6px;
-                padding: 8px;
+                padding: 10px 12px;
                 margin-bottom: 6px;
-                transition: background-color 0.2s ease;
-                position: relative;
-                cursor: default;
+                transition: background-color 0.2s ease, border-color 0.2s ease;
+                display: grid;
+                grid-template-columns: auto auto 1fr auto;
+                align-items: flex-start;
+                gap: 8px;
             }
 
             .command-item:hover {
@@ -1378,19 +1506,26 @@
                 text-decoration: line-through;
             }
 
+            .command-item.dragging {
+                opacity: 0.5;
+            }
+
+            .command-item.drag-over {
+                border: 2px dashed var(--info);
+                background: rgba(64, 150, 255, 0.08);
+            }
+
             .command-item .drag-handle {
-                position: absolute;
-                left: 4px;
-                top: 50%;
-                transform: translateY(-50%);
+                display: flex;
+                align-items: center;
+                justify-content: center;
                 color: var(--text-tertiary);
                 cursor: grab;
-                font-size: 10px;
+                font-size: 12px;
                 user-select: none;
                 -webkit-user-select: none;
                 padding: 2px;
-                border-radius: 2px;
-                z-index: 10;
+                border-radius: 4px;
             }
 
             .command-item .drag-handle:hover {
@@ -1403,37 +1538,32 @@
             }
 
             .command-item .command-status {
-                margin-left: 20px;
-                margin-right: 8px;
-                font-size: 10px;
+                font-size: 12px;
+                color: var(--text-secondary);
             }
 
             .command-item .command-text {
-                flex: 1;
-                margin-right: 20px;
-                font-size: 11px;
+                font-size: 12px;
                 word-break: break-word;
                 cursor: text;
                 user-select: text;
                 -webkit-user-select: text;
                 -moz-user-select: text;
                 -ms-user-select: text;
+                line-height: 1.5;
             }
 
             .command-item .command-delete {
-                position: absolute;
-                right: 6px;
-                top: 50%;
-                transform: translateY(-50%);
                 color: var(--warning);
                 cursor: pointer;
-                font-size: 12px;
-                padding: 2px;
-                border-radius: 2px;
+                font-size: 14px;
+                padding: 2px 6px;
+                border-radius: 4px;
+                align-self: center;
             }
 
             .command-item .command-delete:hover {
-                background: rgba(231, 76, 60, 0.1);
+                background: rgba(231, 76, 60, 0.12);
             }
 
             /* 最小化状态 */
@@ -1546,40 +1676,9 @@
                 max-height: 60px !important;
                 height: 60px !important;
             }
-
-            .command-item {
-                background: #34495e; border-radius: 6px; padding: 8px; margin-bottom: 6px; transition: background-color 0.2s ease; position: relative; cursor: default;
-            }
-            .command-item:hover {
-                background: #2c3e50;
-            }
-
-            .command-item .drag-handle {
-                position: absolute; left: 4px; top: 50%; transform: translateY(-50%); color: #c0c4cc; cursor: grab; font-size: 10px; user-select: none; -webkit-user-select: none; padding: 2px; border-radius: 2px; z-index: 10;
-            }
-            .command-item .drag-handle:hover {
-                background: rgba(64, 150, 255, 0.1);
-                color: #4096ff;
-            }
-            .command-item .drag-handle:active {
-                cursor: grabbing;
-            }
-            .command-item .command-status {
-                margin-left: 20px; margin-right: 8px; font-size: 10px; color: #ffffff;
-            }
-            .command-item .command-text {
-                flex: 1; margin-right: 20px; font-size: 11px; word-break: break-word; cursor: text; user-select: text; -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; color: #ffffff;
-            }
-            .command-item .command-delete {
-                position: absolute; right: 6px; top: 50%; transform: translateY(-50%); color: #f56c6c; cursor: pointer; font-size: 12px; padding: 2px; border-radius: 2px;
-            }
-            .command-item .command-delete:hover {
-                background: #fee;
-            }
         `;
         document.head.appendChild(style);
 
-        const header = document.getElementById('trae-header');
         const minimizeBtn = document.getElementById('trae-minimize');
         const minimizeBtnMinimized = document.getElementById('trae-minimize-minimized');
         const toggleBtn = document.getElementById('trae-toggle');
@@ -1595,6 +1694,7 @@
         const commandToggle = document.getElementById('trae-command-toggle');
         const commandContent = document.getElementById('trae-command-content');
         const commandArrow = document.getElementById('trae-command-arrow');
+        const panelHeader = document.getElementById('trae-header');
 
         // 抽屉日志自动收起逻辑
         let logCollapseTimer = null;
@@ -1675,7 +1775,9 @@
             }
         });
 
-        header.addEventListener('click', e => !e.target.closest('button') && minimize());
+        if (panelHeader) {
+            panelHeader.addEventListener('click', e => !e.target.closest('button') && minimize());
+        }
         minimizeBtn.addEventListener('click', e => { e.stopPropagation(); minimize(); });
         minimizeBtnMinimized.addEventListener('click', e => { e.stopPropagation(); minimize(); });
         toggleBtn.addEventListener('click', toggle);
@@ -1750,13 +1852,46 @@
         applyTheme();
         updateMinimizedTitle();
 
-        panel.addEventListener('mousedown', e => {
-            if (e.target.closest('button')) return;
+        if (logContent) {
+            logContent.style.display = 'none';
+            if (logArrow) logArrow.textContent = '▶';
+            isLogExpanded = false;
+        }
+
+        if (commandContent) {
+            commandContent.style.display = 'none';
+            if (commandArrow) commandArrow.textContent = '▶';
+            isCommandExpanded = false;
+        }
+
+        const beginPanelDrag = (event) => {
+            if (event.target.closest('button') || event.target.closest('#trae-header-actions')) {
+                return;
+            }
             isDragging = true;
-            dragOffset.x = e.clientX - panel.offsetLeft;
-            dragOffset.y = e.clientY - panel.offsetTop;
-            panel.style.cursor = 'grabbing';
-        });
+            dragOffset.x = event.clientX - panel.offsetLeft;
+            dragOffset.y = event.clientY - panel.offsetTop;
+            panel.classList.add('trae-panel-dragging');
+        };
+
+        const endPanelDrag = () => {
+            if (isDragging) {
+                isDragging = false;
+                panel.classList.remove('trae-panel-dragging');
+            }
+        };
+
+        if (panelHeader) {
+            panelHeader.addEventListener('mousedown', beginPanelDrag);
+        }
+
+        const minimizedContent = document.getElementById('trae-minimized-content');
+        if (minimizedContent) {
+            minimizedContent.addEventListener('mousedown', (event) => {
+                if (event.target.closest('button')) return;
+                beginPanelDrag(event);
+            });
+        }
 
         document.addEventListener('mousemove', e => {
             if (!isDragging) return;
@@ -1774,12 +1909,7 @@
             panel.style.right = 'auto';
         });
 
-        document.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
-                panel.style.cursor = 'move';
-            }
-        });
+        document.addEventListener('mouseup', endPanelDrag);
 
         log('🎯 TraeCN 自动操作脚本已加载');
         log(`📝 日志缓冲区: ${LOG_BUFFER_SIZE} 条`);
@@ -1795,13 +1925,18 @@
         isCommandDragging = true;
         draggedCommand = commands.find(cmd => cmd.id === commandId);
         event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('text/html', event.target.innerHTML);
+        const dragContainer = event.currentTarget && event.currentTarget.closest ? event.currentTarget.closest('.command-item') : event.currentTarget;
+        if (dragContainer) {
+            event.dataTransfer.setData('text/html', dragContainer.innerHTML);
+        } else {
+            event.dataTransfer.setData('text/html', '');
+        }
         event.dataTransfer.setData('commandId', commandId);
 
-        // 只让拖拽图标变透明，不是整个命令项
-        event.target.style.opacity = '0.5';
+        if (dragContainer && dragContainer.classList) {
+            dragContainer.classList.add('dragging');
+        }
 
-        // 阻止事件冒泡，避免触发父元素的事件
         event.stopPropagation();
     };
 
@@ -1809,13 +1944,29 @@
         if (event.preventDefault) {
             event.preventDefault();
         }
+        const target = event.currentTarget;
+        if (target && target.classList) {
+            target.classList.add('drag-over');
+        }
         event.dataTransfer.dropEffect = 'move';
         return false;
+    };
+
+    window.handleCommandDragLeave = function (event) {
+        const target = event.currentTarget;
+        if (target && target.classList) {
+            target.classList.remove('drag-over');
+        }
     };
 
     window.handleCommandDrop = function (event, targetCommandId) {
         if (event.stopPropagation) {
             event.stopPropagation();
+        }
+
+        const targetElement = event.currentTarget;
+        if (targetElement && targetElement.classList) {
+            targetElement.classList.remove('drag-over');
         }
 
         if (isCommandDragging && draggedCommand) {
@@ -1847,12 +1998,13 @@
 
     window.handleCommandDragEnd = function (event) {
         isCommandDragging = false;
-        draggedCommand = null;
-
-        // 恢复拖拽图标的透明度
-        if (event.target) {
-            event.target.style.opacity = '';
+        const dragContainer = event && event.currentTarget && event.currentTarget.closest ? event.currentTarget.closest('.command-item') : null;
+        if (dragContainer && dragContainer.classList) {
+            dragContainer.classList.remove('dragging');
+            dragContainer.classList.remove('drag-over');
         }
+        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        draggedCommand = null;
     };
 
     window.traeAutoAccept = {
