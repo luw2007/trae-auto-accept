@@ -56,8 +56,14 @@ function minimalCompress(code) {
 try {
     const sourceCode = fs.readFileSync('trae-browser-script.js', 'utf8');
     const compressedCode = minimalCompress(sourceCode);
+    const buildTimestamp = new Date().toISOString();
+    const timestampLog = `;console.log('🕒 TraeCN 脚本构建时间: ${buildTimestamp}');`;
+    const suffix = '})();';
+    const outputCode = compressedCode.endsWith(suffix)
+        ? compressedCode.slice(0, -suffix.length) + timestampLog + suffix
+        : compressedCode + timestampLog;
 
-    fs.writeFileSync('trae-browser-script-min.js', compressedCode, 'utf8');
+    fs.writeFileSync('trae-browser-script-min.js', outputCode, 'utf8');
 
     const originalSize = fs.statSync('trae-browser-script.js').size;
     const compressedSize = fs.statSync('trae-browser-script-min.js').size;

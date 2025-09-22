@@ -8,12 +8,18 @@
     let clickLimit = 5, clickCount = 0;
     let enableDelete = false;
     let commands = [];
+    let isPanelMinimized = false;
+    let chatLayoutObserver = null;
     const PANEL_SIZES = [
         { width: 360, logMax: 140, commandMax: 200 },
         { width: 420, logMax: 180, commandMax: 240 },
         { width: 540, logMax: 240, commandMax: 320 }
     ];
     let panelSizeIndex = 1;
+    const COMMAND_HOTKEY_STORAGE_KEY = 'trae-command-input-hotkey';
+    let commandInputHotkey = null;
+    let isBindingCommandHotkey = false;
+
 
     // 简洁的主题系统 - 使用CSS变量
     const THEMES = {
@@ -232,6 +238,364 @@
         // 日志抽屉保持手动展开，不自动展开
     }
 
+    function findAncestorContaining(startNode, targetNode) {
+        if (!startNode || !targetNode) {
+            return null;
+        }
+        let current = startNode;
+        while (current && current !== document.body && current !== document.documentElement) {
+            if (current.contains(targetNode)) {
+                return current;
+            }
+            current = current.parentElement;
+        }
+        return null;
+    }
+
+    function ensureChatInputLayout() {
+        try {
+            const editable = document.querySelector('.chat-input-v2-input-box-editable');
+            const sendButton = document.querySelector('.chat-input-v2-send-button');
+            if (!editable || !sendButton) {
+                return false;
+            }
+
+            const inputContainer = editable.closest('.chat-input-v2-input-box') || editable.parentElement;
+            if (!inputContainer) {
+                return false;
+            }
+
+            const layoutContainer = findAncestorContaining(inputContainer, sendButton);
+            if (!layoutContainer) {
+                return false;
+            }
+
+            if (layoutContainer.dataset.traeChatLayout === 'fixed') {
+                return true;
+            }
+
+            layoutContainer.dataset.traeChatLayout = 'fixed';
+            layoutContainer.style.display = 'grid';
+            layoutContainer.style.gridTemplateColumns = '1fr auto';
+            layoutContainer.style.columnGap = '12px';
+            layoutContainer.style.alignItems = 'stretch';
+            layoutContainer.style.width = '100%';
+
+            inputContainer.style.minWidth = '0';
+            inputContainer.style.width = '100%';
+
+            const editableWrapper = editable.parentElement;
+            if (editableWrapper && editableWrapper !== inputContainer) {
+                editableWrapper.style.minWidth = '0';
+                editableWrapper.style.width = '100%';
+            }
+
+            sendButton.style.alignSelf = 'stretch';
+            sendButton.style.display = 'flex';
+            sendButton.style.alignItems = 'center';
+            sendButton.style.justifyContent = 'center';
+            sendButton.style.whiteSpace = 'nowrap';
+
+            return true;
+        } catch (error) {
+            console.warn('调整 chat-input 布局失败:', error);
+            return false;
+        }
+    }
+
+    function startChatLayoutObserver() {
+        if (chatLayoutObserver) {
+            return;
+        }
+
+        const tryApplyLayout = () => ensureChatInputLayout();
+
+        tryApplyLayout();
+
+        if (!document.body) {
+            setTimeout(startChatLayoutObserver, 50);
+            return;
+        }
+
+        chatLayoutObserver = new MutationObserver(() => {
+            tryApplyLayout();
+        });
+        chatLayoutObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    function loadCommandHotkey() {
+        try {
+            if (typeof window === 'undefined' || !window.localStorage) {
+                return;
+            }
+            const stored = window.localStorage.getItem(COMMAND_HOTKEY_STORAGE_KEY);
+            if (!stored) return;
+            const parsed = JSON.parse(stored);
+            if (parsed && typeof parsed === 'object' && parsed.key) {
+                commandInputHotkey = {
+                    key: parsed.key,
+                    ctrlKey: !!parsed.ctrlKey,
+                    metaKey: !!parsed.metaKey,
+                    altKey: !!parsed.altKey,
+                    shiftKey: !!parsed.shiftKey
+                };
+            }
+        } catch (error) {
+            console.warn('加载快捷键失败', error);
+            commandInputHotkey = null;
+        }
+    }
+
+    function saveCommandHotkey(hotkey) {
+        if (!hotkey) return;
+        try {
+            if (typeof window === 'undefined' || !window.localStorage) {
+                return;
+            }
+            window.localStorage.setItem(COMMAND_HOTKEY_STORAGE_KEY, JSON.stringify(hotkey));
+        } catch (error) {
+            console.warn('保存快捷键失败', error);
+        }
+    }
+
+    function clearCommandHotkeySetting() {
+        commandInputHotkey = null;
+        if (typeof window !== 'undefined' && window.localStorage) {
+            try {
+                window.localStorage.removeItem(COMMAND_HOTKEY_STORAGE_KEY);
+            } catch (error) {
+                console.warn('清除快捷键失败', error);
+            }
+        }
+        updateCommandHotkeyUI();
+        log('🧹 已清除命令输入快捷键');
+    }
+
+    function normalizeHotkeyKey(event) {
+        if (!event) return null;
+        const skipKeys = ['Shift', 'Control', 'Alt', 'Meta'];
+        if (skipKeys.includes(event.key)) return null;
+        if (event.key === 'Dead' || event.key === 'Unidentified') return null;
+
+        const code = event.code || '';
+        const key = event.key || '';
+
+        if (/^Key[A-Z]$/.test(code)) {
+            return code.slice(3);
+        }
+        if (/^Digit[0-9]$/.test(code)) {
+            return code.slice(5);
+        }
+        if (/^Numpad[0-9]$/.test(code)) {
+            return 'Num' + code.slice(6);
+        }
+        if (code === 'Space' || key === ' ') {
+            return 'Space';
+        }
+        if (key === 'Escape') {
+            return 'Esc';
+        }
+        if (key === 'Tab') {
+            return 'Tab';
+        }
+        if (key === 'Enter') {
+            return 'Enter';
+        }
+        if (key === 'Backspace') {
+            return 'Backspace';
+        }
+        if (key === 'Delete') {
+            return 'Delete';
+        }
+        if (key.startsWith('Arrow')) {
+            return key;
+        }
+        if (/^F[1-9][0-2]?$/.test(key)) {
+            return key.toUpperCase();
+        }
+        if (key.length === 1) {
+            return key.toUpperCase();
+        }
+        return key.charAt(0).toUpperCase() + key.slice(1);
+    }
+
+    function buildHotkeyFromEvent(event) {
+        const key = normalizeHotkeyKey(event);
+        if (!key) {
+            return null;
+        }
+
+        const hasFunctionalKey = /^F[1-9][0-2]?$/.test(key) || ['Enter', 'Tab', 'Backspace', 'Delete', 'Space', 'Esc'].includes(key) || key.startsWith('Arrow');
+        const hasRequiredModifier = event.ctrlKey || event.metaKey || event.altKey;
+
+        if (!hasFunctionalKey && !hasRequiredModifier) {
+            return null;
+        }
+
+        return {
+            key,
+            ctrlKey: !!event.ctrlKey,
+            metaKey: !!event.metaKey,
+            altKey: !!event.altKey,
+            shiftKey: !!event.shiftKey
+        };
+    }
+
+    function hotkeyToDisplay(hotkey) {
+        if (!hotkey) return '';
+        const parts = [];
+        if (hotkey.ctrlKey) parts.push('Ctrl');
+        if (hotkey.metaKey) parts.push('Cmd');
+        if (hotkey.altKey) parts.push('Alt');
+        if (hotkey.shiftKey) parts.push('Shift');
+        parts.push(hotkey.key);
+        return parts.join('+');
+    }
+
+    function hotkeyMatches(event, hotkey) {
+        if (!hotkey) return false;
+        const key = normalizeHotkeyKey(event);
+        if (!key) return false;
+        return key === hotkey.key && !!event.ctrlKey === !!hotkey.ctrlKey && !!event.metaKey === !!hotkey.metaKey && !!event.altKey === !!hotkey.altKey && !!event.shiftKey === !!hotkey.shiftKey;
+    }
+
+    function updateCommandHotkeyUI() {
+        const hotkeyButton = document.getElementById('trae-command-hotkey-button');
+        if (!hotkeyButton) return;
+
+        if (isBindingCommandHotkey) {
+            hotkeyButton.textContent = '⌛ 等待按键，Esc 清除';
+            hotkeyButton.dataset.state = 'binding';
+            hotkeyButton.title = '按下组合键设置快捷键，Esc 清除当前快捷键';
+        } else if (commandInputHotkey) {
+            hotkeyButton.textContent = hotkeyToDisplay(commandInputHotkey);
+            hotkeyButton.dataset.state = 'set';
+            hotkeyButton.title = '点击重新设置快捷键';
+        } else {
+            hotkeyButton.textContent = '点击设置';
+            hotkeyButton.dataset.state = 'empty';
+            hotkeyButton.title = '点击设置命令输入快捷键';
+        }
+    }
+
+    function beginCommandHotkeyBinding() {
+        if (isBindingCommandHotkey) return;
+        isBindingCommandHotkey = true;
+        updateCommandHotkeyUI();
+        log('⌨️ 正在监听新的快捷键，按 Esc 清除');
+    }
+
+    function cancelCommandHotkeyBinding(showLog = true) {
+        if (!isBindingCommandHotkey) return;
+        isBindingCommandHotkey = false;
+        updateCommandHotkeyUI();
+        if (showLog) {
+            log('ℹ️ 已取消快捷键绑定');
+        }
+    }
+
+    function finishCommandHotkeyBinding(event) {
+        if (!isBindingCommandHotkey) return;
+
+        if (event.key === 'Escape' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+            const hadHotkey = !!commandInputHotkey;
+            isBindingCommandHotkey = false;
+            if (hadHotkey) {
+                clearCommandHotkeySetting();
+            } else {
+                updateCommandHotkeyUI();
+                log('ℹ️ 已取消快捷键绑定');
+            }
+            return;
+        }
+
+        const hotkey = buildHotkeyFromEvent(event);
+        if (!hotkey) {
+            log('⚠️ 请至少包含功能键或配合 Ctrl/Cmd/Alt 使用');
+            return;
+        }
+
+        commandInputHotkey = hotkey;
+        saveCommandHotkey(hotkey);
+        isBindingCommandHotkey = false;
+        updateCommandHotkeyUI();
+        log(`⌨️ 快捷键已更新为 ${hotkeyToDisplay(hotkey)}`);
+    }
+
+    function focusCommandInputFallback() {
+        const controls = document.getElementById('trae-controls');
+        if (controls && isPanelMinimized) {
+            minimize();
+        }
+
+        const commandContent = document.getElementById('trae-command-content');
+        const commandArrow = document.getElementById('trae-command-arrow');
+        if (commandContent && commandContent.style.display === 'none') {
+            commandContent.style.display = 'block';
+            if (commandArrow) {
+                commandArrow.textContent = '▼';
+            }
+        }
+
+        const commandInput = document.getElementById('trae-command-input');
+        if (commandInput) {
+            commandInput.focus();
+            const end = commandInput.value.length;
+            commandInput.setSelectionRange(end, end);
+        }
+    }
+
+    function handleGlobalHotkey(event) {
+        if (event.repeat) {
+            return;
+        }
+
+        if (isBindingCommandHotkey) {
+            event.preventDefault();
+            event.stopPropagation();
+            finishCommandHotkeyBinding(event);
+            return;
+        }
+
+        if (!commandInputHotkey) {
+            return;
+        }
+
+        if (!hotkeyMatches(event, commandInputHotkey)) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const commandInput = document.getElementById('trae-command-input');
+        const activeElement = document.activeElement;
+        const isInputFocused = commandInput && (activeElement === commandInput || (activeElement && typeof activeElement.closest === 'function' && activeElement.closest('#trae-command-input-area')));
+
+        if (isPanelMinimized) {
+            minimize();
+            setTimeout(() => {
+                if (typeof window.focusCommandInputArea === 'function') {
+                    window.focusCommandInputArea();
+                } else {
+                    focusCommandInputFallback();
+                }
+            }, 300);
+            return;
+        }
+
+        if (isInputFocused) {
+            minimize();
+            return;
+        }
+
+        if (typeof window.focusCommandInputArea === 'function') {
+            window.focusCommandInputArea();
+        } else {
+            focusCommandInputFallback();
+        }
+    }
+
     function addCommand() {
         const input = document.getElementById('trae-command-input');
         const command = input.value.trim();
@@ -293,9 +657,15 @@
             commandItem.innerHTML = `
                 <span class="drag-handle" style="display: ${isPending ? 'flex' : 'none'};" data-command-id="${command.id}" title="拖拽排序" draggable="${isPending}">⋮⋮</span>
                 <span class="command-status">${statusIcon}</span>
-                <span class="command-text">${command.text}</span>
+                <span class="command-text"></span>
                 <span class="command-delete" onclick="removeCommand(${command.id})" title="删除">×</span>
             `;
+            const commandTextEl = commandItem.querySelector('.command-text');
+            if (commandTextEl) {
+                commandTextEl.textContent = command.text;
+                commandTextEl.setAttribute('title', command.text);
+            }
+
 
             if (isPending) {
                 const dragHandle = commandItem.querySelector('.drag-handle');
@@ -468,7 +838,7 @@
 
             // 等待界面响应后再检查发送状态
             setTimeout(() => {
-                checkAndSendCommand(sendButton, command);
+                scheduleOptimizeAndSend(command);
             }, 1000);
 
             return true;
@@ -478,52 +848,137 @@
         }
     }
 
-    function checkAndSendCommand(sendButton, command) {
+    function scheduleOptimizeAndSend(command) {
         try {
-            // 检查当前按钮状态
+            const sendButton = document.querySelector('.chat-input-v2-send-button');
+            if (!sendButton) {
+                log('❌ 未找到发送按钮');
+                return;
+            }
+            log('🔄 准备检查优化流程');
+            attemptPromptOptimization(command, 0);
+        } catch (error) {
+            log(`❌ 准备优化流程失败: ${error.message}`);
+        }
+    }
+
+    function attemptPromptOptimization(command, attempt) {
+        try {
+            const optimizeBtn = document.querySelector('.chat-input-v2-prompt-optimize-button');
+            if (isButtonInteractive(optimizeBtn)) {
+                log('✨ 检测到提示优化按钮，准备点击');
+                try {
+                    optimizeBtn.click();
+                    log('✨ 已触发提示优化');
+                    // 等待优化完成，优化按钮会被禁用直到优化完成
+                    waitForOptimizationComplete(command, 0);
+                } catch (error) {
+                    log(`❌ 点击提示优化失败: ${error.message}`);
+                    waitForSendReady(command, 0);
+                }
+                return;
+            }
+
+            if (attempt >= 2) {
+                log('ℹ️ 提示优化不可用，直接准备发送');
+                waitForSendReady(command, 0);
+                return;
+            }
+
+            setTimeout(() => {
+                attemptPromptOptimization(command, attempt + 1);
+            }, 300);
+            return;
+        } catch (error) {
+            log(`❌ 检查提示优化失败: ${error.message}`);
+            waitForSendReady(command, 0);
+        }
+    }
+
+    function waitForOptimizationComplete(command, attempt) {
+        try {
+            const optimizeBtn = document.querySelector('.chat-input-v2-prompt-optimize-button');
+            if (!optimizeBtn) {
+                log('ℹ️ 优化按钮不存在，直接准备发送');
+                waitForSendReady(command, 0);
+                return;
+            }
+
+            // 优化过程中按钮会被禁用，优化完成后会重新启用
+            const isOptimizing = optimizeBtn.disabled;
+
+            if (!isOptimizing) {
+                log('✅ 优化完成，准备发送');
+                waitForSendReady(command, 0);
+                return;
+            }
+
+            if (attempt >= 30) { // 最多等待15秒 (30 * 500ms)
+                log('⚠️ 等待优化完成超时，直接发送');
+                waitForSendReady(command, 0);
+                return;
+            }
+
+            setTimeout(() => {
+                waitForOptimizationComplete(command, attempt + 1);
+            }, 500);
+        } catch (error) {
+            log(`❌ 等待优化完成失败: ${error.message}`);
+            waitForSendReady(command, 0);
+        }
+    }
+
+    function waitForSendReady(command, attempt) {
+        try {
+            const sendButton = document.querySelector('.chat-input-v2-send-button');
+            if (!sendButton) {
+                log('❌ 等待过程中未找到发送按钮');
+                return false;
+            }
+
             const isRunning = sendButton.querySelector('.codicon-stop-circle');
-            const isDisabled = sendButton.disabled;
-            const hasArrowUp = sendButton.querySelector('.codicon-icube-ArrowUp');
-
-            log(`📊 发送前状态: running=${!!isRunning}, disabled=${isDisabled}, hasArrowUp=${!!hasArrowUp}`);
-
-            // 检查输入框是否有内容
-            const chatInput = document.querySelector('.chat-input-v2-input-box-editable');
-            const paragraph = chatInput.querySelector('p.chat-input-v2__paragraph');
-            const textContent = paragraph ? paragraph.textContent.trim() : '';
-            const hasContent = chatInput && textContent.length > 0;
+            const isDisabled = sendButton.disabled || sendButton.getAttribute('data-state') === 'loading';
+            const hasContent = chatInputHasContent();
 
             if (!hasContent) {
                 log('❌ 输入框为空，无法发送');
                 return false;
             }
 
-            // 只有在可以发送的状态才发送
             if (!isRunning && !isDisabled) {
                 sendButton.click();
                 log('📤 命令已发送');
                 return true;
-            } else if (isRunning) {
-                log('⚠️ Trae正在运行，等待发送时机');
-                // 等待5秒后重试
-                setTimeout(() => {
-                    checkAndSendCommand(sendButton, command);
-                }, 5000);
-            } else if (isDisabled) {
-                log('⚠️ 按钮被禁用，等待可用状态');
-                // 等待3秒后重试
-                setTimeout(() => {
-                    checkAndSendCommand(sendButton, command);
-                }, 3000);
             }
 
+            if (attempt >= 20) {
+                log('⚠️ 等待发送按钮超时');
+                return false;
+            }
+
+            setTimeout(() => {
+                waitForSendReady(command, attempt + 1);
+            }, 300);
             return false;
         } catch (error) {
-            log(`❌ 发送命令失败: ${error.message}`);
+            log(`❌ 等待发送按钮失败: ${error.message}`);
             return false;
         }
     }
 
+    function chatInputHasContent() {
+        try {
+            const chatInput = document.querySelector('.chat-input-v2-input-box-editable');
+            if (!chatInput) {
+                return false;
+            }
+            const paragraph = chatInput.querySelector('p.chat-input-v2__paragraph');
+            const textContent = paragraph ? paragraph.textContent.trim() : '';
+            return textContent.length > 0;
+        } catch (error) {
+            return false;
+        }
+    }
 
     function isButtonVisible(button) {
         try {
@@ -535,6 +990,30 @@
             return false;
         }
     }
+
+
+    function isButtonInteractive(button) {
+        try {
+            if (!button) {
+                return false;
+            }
+            if (button.disabled) {
+                return false;
+            }
+            const ariaDisabled = button.getAttribute('aria-disabled');
+            if (ariaDisabled === 'true') {
+                return false;
+            }
+            const dataState = button.getAttribute('data-state');
+            if (dataState === 'loading') {
+                return false;
+            }
+            return isButtonVisible(button);
+        } catch (error) {
+            return false;
+        }
+    }
+
 
     const BUTTON_CONFIGS = [
         { name: '继续', selector: 'div.agent-error-wrap div.icube-alert-action', validate: (b) => b.textContent.trim() === '继续' },
@@ -635,7 +1114,7 @@
                 clickCount = 0;
                 updateMinimizedTitle();
                 stop(true);
-            }, 100);
+            }, 300);
             return true;
         }
         return false;
@@ -678,7 +1157,7 @@
         findAndClick();
 
         setTimeout(() => {
-            if (controls && controls.style.display !== 'none') {
+            if (!isPanelMinimized) {
                 minimize();
                 log('📱 自动收起控制面板');
             }
@@ -697,8 +1176,7 @@
             log('⏹️ 停止自动操作');
         }
 
-        const controls = document.getElementById('trae-controls');
-        if (controls && controls.style.display === 'none') {
+        if (isPanelMinimized) {
             minimize();
             log('📱 自动展开控制面板');
         }
@@ -875,7 +1353,7 @@
             if (plusOne && plusOne.parentNode) {
                 plusOne.remove();
             }
-        }, 1000);
+        }, 300);
     }
 
     function minimize() {
@@ -888,7 +1366,7 @@
 
         if (!controls || !panel || !header || !minimizedContent) return;
 
-        if (controls.style.display === 'none') {
+        if (isPanelMinimized) {
             controls.style.display = 'block';
             header.style.display = 'flex';
             minimizedContent.style.display = 'none';
@@ -901,6 +1379,7 @@
             panel.style.removeProperty('display');
             panel.style.removeProperty('align-items');
             panel.style.removeProperty('justify-content');
+            isPanelMinimized = false;
             updateMinimizeButton(false);
             applyTheme();
             applyPanelSize();
@@ -918,6 +1397,7 @@
             panel.style.display = 'flex';
             panel.style.alignItems = 'center';
             panel.style.justifyContent = 'center';
+            isPanelMinimized = true;
             updateMinimizeButton(true);
             applyTheme();
         }
@@ -927,6 +1407,15 @@
         if (!confirm('确定要退出 TraeCN 自动操作吗？')) return;
 
         stop();
+        document.removeEventListener('keydown', handleGlobalHotkey, true);
+        cancelCommandHotkeyBinding(false);
+        window.focusCommandInputArea = undefined;
+
+        if (chatLayoutObserver) {
+            chatLayoutObserver.disconnect();
+            chatLayoutObserver = null;
+        }
+
         const panel = document.getElementById('trae-panel');
         if (panel) panel.remove();
 
@@ -944,6 +1433,9 @@
         panel.style.width = `${size.width}px`;
         panel.style.setProperty('--log-list-max-height', `${size.logMax}px`);
         panel.style.setProperty('--command-list-max-height', `${size.commandMax}px`);
+
+        const sizeName = panelSizeIndex === 0 ? 'compact' : panelSizeIndex === 1 ? 'medium' : 'large';
+        panel.dataset.size = sizeName;
     }
 
     function updateSizeControls() {
@@ -1020,15 +1512,17 @@
 
                     <!-- 配置选项区域 -->
                     <div style="display: flex; flex-direction: column; gap: 6px;">
-                        <!-- 自动删除配置 -->
-                        <div style="display: flex; align-items: center; gap: 4px;">
+                        <div class="trae-config-row">
                             <span>自动删除</span>
                             <input type="checkbox" id="trae-enable-delete">
                         </div>
-                        <!-- 限额配置 -->
-                        <div style="display: flex; align-items: center; gap: 4px;">
+                        <div class="trae-config-row">
                             <span>限额</span>
                             <input type="number" id="trae-click-limit" min="0" max="99" value="5">
+                        </div>
+                        <div class="trae-config-row">
+                            <span>快捷键</span>
+                            <button id="trae-command-hotkey-button" class="trae-hotkey-inline-button" data-state="empty">[点击设置]</button>
                         </div>
                     </div>
                 </div>
@@ -1036,7 +1530,25 @@
                 <!-- 命令输入区域 - 始终可见 -->
                 <div id="trae-command-input-area">
                     <textarea id="trae-command-input" placeholder="输入命令... 按 Ctrl+Enter 或 Cmd+Enter 提交" onkeydown="if((event.key==='Enter' && (event.ctrlKey || event.metaKey)) || (event.key==='Enter' && event.altKey)){event.preventDefault();addCommand();} else if(event.key==='Enter'){event.stopPropagation();}"></textarea>
-                    <button id="trae-add-command" disabled>发送</button>
+                </div>
+
+                <!-- 抽屉式命令列表区域 -->
+                <div id="trae-command-drawer">
+                    <!-- 命令列表头部 -->
+                    <div id="trae-command-toggle">
+                        <div>
+                            <span id="trae-command-arrow">▼</span>
+                            <span>命令列表</span>
+                        </div>
+                        <span id="trae-command-count">0 个命令</span>
+                    </div>
+
+                    <!-- 命令列表内容区域 -->
+                    <div id="trae-command-content" style="display: block;">
+                        <div id="trae-command-list" style="max-height: var(--command-list-max-height, 200px); overflow-y: auto; background: var(--bg-primary); border-top: 1px solid var(--border-color);" data-theme-bg="white" data-theme-border="#e0e0e0">
+                            <div id="trae-command-items" style="padding: 12px 16px;"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 抽屉式操作日志 -->
@@ -1050,25 +1562,6 @@
                     </div>
                     <div id="trae-log-content">
                         <div id="trae-log-list"></div>
-                    </div>
-                </div>
-
-                <!-- 抽屉式命令列表区域 -->
-                <div id="trae-command-drawer">
-                    <!-- 命令列表头部 -->
-                    <div id="trae-command-toggle">
-                        <div>
-                            <span id="trae-command-arrow">▶</span>
-                            <span>命令列表</span>
-                        </div>
-                        <span id="trae-command-count">0 个命令</span>
-                    </div>
-
-                    <!-- 命令列表内容区域 -->
-                    <div id="trae-command-content" style="display: none;">
-                        <div id="trae-command-list" style="max-height: var(--command-list-max-height, 200px); overflow-y: auto; background: var(--bg-primary); border-top: 1px solid var(--border-color);" data-theme-bg="white" data-theme-border="#e0e0e0">
-                            <div id="trae-command-items" style="padding: 12px 16px;"></div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1400,20 +1893,69 @@
                 border: 1px solid var(--border-color);
                 background: var(--bg-primary);
                 overflow: hidden;
-                padding: 12px 16px;
                 display: flex;
-                gap: 8px;
-                align-items: stretch;
+                flex-direction: column;
+                gap: 0;
             }
 
-            #trae-command-input-area > textarea {
-                flex: 1;
-                min-width: 0;
+    
+            .trae-config-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 12px;
+                color: var(--text-secondary);
+            }
+
+            .trae-config-row > span {
+                min-width: 48px;
+                color: var(--text-primary);
+            }
+
+            .trae-config-row input[type="number"] {
+                width: 50px;
+                padding: 2px 4px;
+                border-radius: 3px;
+                border: 1px solid var(--input-border);
+                background: var(--input-bg);
+                color: var(--text-primary);
+                font-size: 12px;
+            }
+
+            .trae-hotkey-inline-button {
+                border: 1px solid var(--border-color);
+                background: var(--bg-secondary);
+                color: var(--text-primary);
+                padding: 2px 8px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+                line-height: 1.4;
+                transition: all 0.2s ease;
+            }
+
+            .trae-hotkey-inline-button[data-state="empty"] {
+                color: var(--text-secondary);
+            }
+
+            .trae-hotkey-inline-button[data-state="binding"] {
+                color: var(--warning);
+                border-color: var(--warning);
+            }
+
+            .trae-hotkey-inline-button[data-state="set"] {
+                color: var(--info);
+                border-color: var(--info);
+            }
+
+            .trae-hotkey-inline-button:hover {
+                border-color: var(--info);
+                color: var(--info);
             }
 
             #trae-command-input {
                 height: 60px;
-                padding: 12px;
+                padding: 0;
                 border-radius: 6px;
                 font-size: 13px;
                 border: 2px solid var(--input-border);
@@ -1446,11 +1988,12 @@
                 transition: all 0.2s ease;
                 font-size: 12px;
                 min-width: 40px;
+                width: 72px;
                 height: 60px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                flex-shrink: 0;
+                flex: 0 0 72px;
             }
 
             #trae-add-command:hover {
@@ -1551,6 +2094,21 @@
                 -moz-user-select: text;
                 -ms-user-select: text;
                 line-height: 1.5;
+            }
+
+            #trae-panel[data-size="compact"] .command-item {
+                align-items: center;
+                grid-template-columns: auto auto 1fr auto;
+            }
+
+            #trae-panel[data-size="compact"] .command-item .command-text {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            #trae-panel[data-size="compact"] .command-item .command-status {
+                align-self: center;
             }
 
             .command-item .command-delete {
@@ -1687,7 +2245,7 @@
         const limitInput = document.getElementById('trae-click-limit');
         const deleteCheckbox = document.getElementById('trae-enable-delete');
         const commandInput = document.getElementById('trae-command-input');
-        const addCommandBtn = document.getElementById('trae-add-command');
+        const hotkeyButton = document.getElementById('trae-command-hotkey-button');
         const logToggle = document.getElementById('trae-log-toggle');
         const logContent = document.getElementById('trae-log-content');
         const logArrow = document.getElementById('trae-log-arrow');
@@ -1695,13 +2253,14 @@
         const commandContent = document.getElementById('trae-command-content');
         const commandArrow = document.getElementById('trae-command-arrow');
         const panelHeader = document.getElementById('trae-header');
+        const controls = document.getElementById('trae-controls');
 
         // 抽屉日志自动收起逻辑
         let logCollapseTimer = null;
         let isLogExpanded = false;
 
         // 命令管理折叠状态
-        let isCommandExpanded = false;
+        let isCommandExpanded = true;
 
         function collapseLog() {
             if (isLogExpanded) {
@@ -1743,6 +2302,24 @@
                 isCommandExpanded = true;
             }
         }
+
+        function focusCommandInputAreaHotkey() {
+            if (controls && isPanelMinimized) {
+                minimize();
+            }
+            expandCommand();
+            if (commandInput) {
+                commandInput.focus();
+                const end = commandInput.value.length;
+                try {
+                    commandInput.setSelectionRange(end, end);
+                } catch (error) {
+                    // 忽略不支持 setSelectionRange 的情况
+                }
+            }
+        }
+
+        window.focusCommandInputArea = focusCommandInputAreaHotkey;
 
         // 日志抽屉点击事件
         logToggle.addEventListener('click', () => {
@@ -1802,51 +2379,17 @@
             // });
         }
 
-        if (addCommandBtn) {
-            addCommandBtn.addEventListener('click', e => {
+  
+        if (hotkeyButton) {
+            hotkeyButton.addEventListener('click', e => {
                 e.stopPropagation();
-                addCommand();
-            });
-        }
-
-        // 添加输入框内容监听，控制发送按钮状态
-        function updateSendButtonState() {
-            const input = document.getElementById('trae-command-input');
-            const sendButton = document.getElementById('trae-add-command');
-            if (input && sendButton) {
-                const hasContent = input.value.trim().length > 0;
-                sendButton.disabled = !hasContent;
-
-                // 根据是否有内容更新按钮颜色和样式
-                if (hasContent) {
-                    // 有内容时显示蓝色可点击状态
-                    sendButton.style.background = '#4096ff';
-                    sendButton.style.cursor = 'pointer';
-                    sendButton.style.boxShadow = '0 2px 8px rgba(64, 150, 255, 0.3)';
+                if (isBindingCommandHotkey) {
+                    cancelCommandHotkeyBinding();
                 } else {
-                    // 无内容时显示灰色不可点击状态
-                    sendButton.style.background = '#c0c4cc';
-                    sendButton.style.cursor = 'not-allowed';
-                    sendButton.style.boxShadow = 'none';
+                    beginCommandHotkeyBinding();
                 }
-            }
-        }
-
-        if (commandInput) {
-            commandInput.addEventListener('input', updateSendButtonState);
-            commandInput.addEventListener('keyup', updateSendButtonState);
-            commandInput.addEventListener('paste', function () {
-                // 粘贴后延迟检查，确保内容已粘贴
-                setTimeout(updateSendButtonState, 10);
-            });
-            commandInput.addEventListener('cut', function () {
-                // 剪切后延迟检查，确保内容已剪切
-                setTimeout(updateSendButtonState, 10);
             });
         }
-
-        // 初始化按钮状态
-        updateSendButtonState();
 
         updateMinimizeButton(false);
         applyTheme();
@@ -1859,9 +2402,9 @@
         }
 
         if (commandContent) {
-            commandContent.style.display = 'none';
-            if (commandArrow) commandArrow.textContent = '▶';
-            isCommandExpanded = false;
+            commandContent.style.display = 'block';
+            if (commandArrow) commandArrow.textContent = '▼';
+            isCommandExpanded = true;
         }
 
         const beginPanelDrag = (event) => {
@@ -2034,7 +2577,13 @@
         }
     };
 
+    loadCommandHotkey();
+    updateCommandHotkeyUI();
+    document.removeEventListener('keydown', handleGlobalHotkey, true);
+    document.addEventListener('keydown', handleGlobalHotkey, true);
+
     createPanel();
+    startChatLayoutObserver();
 
     console.log('🎯 TraeCN 自动操作脚本已加载');
     console.log('💡 使用方法:');
