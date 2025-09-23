@@ -87,15 +87,16 @@
         }
     };
 
-    // 简洁的主题应用函数 - 使用CSS变量
+    // 简洁的主题应用函数 - 使用内联样式避免全局污染
     function applyTheme() {
         const theme = THEMES[isDarkMode ? 'dark' : 'light'];
-        const root = document.documentElement;
+        const panel = document.getElementById('trae-panel');
+        if (!panel) return;
 
-        // 应用所有CSS变量
-        Object.entries(theme).forEach(([key, value]) => {
-            root.style.setProperty(key, value);
-        });
+        // 为面板本身设置主题样式
+        panel.style.background = theme['--panel-bg'];
+        panel.style.color = theme['--text-primary'];
+        panel.style.border = typeof theme['--panel-border'] === 'string' ? theme['--panel-border'] : '';
 
         // 更新状态图标
         const statusIcon = document.getElementById('trae-status-icon');
@@ -109,7 +110,7 @@
         const toggleBtn = document.getElementById('trae-toggle');
         if (toggleBtn) {
             const buttonColor = isRunning ? theme['--text-tertiary'] : theme['--success'];
-            toggleBtn.style.cssText = `background:var(--button-bg);border:1px solid ${buttonColor};color:${buttonColor};padding:8px 12px;margin:2px;border-radius:4px;cursor:pointer;font-weight:bold`;
+            toggleBtn.style.cssText = `background:${theme['--button-bg']};border:1px solid ${buttonColor};color:${buttonColor};padding:8px 12px;margin:2px;border-radius:4px;cursor:pointer;font-weight:bold`;
             toggleBtn.textContent = isRunning ? '停止' : '启动';
         }
 
@@ -138,20 +139,32 @@
         // 更新限额输入框样式
         const clickLimitInput = document.getElementById('trae-click-limit');
         if (clickLimitInput) {
-            clickLimitInput.style.cssText = `width:35px;padding:2px 4px;border-radius:2px;font-size:11px;border:1px solid var(--input-border);outline:none;text-align:center;background:var(--input-bg);color:var(--text-primary);`;
+            clickLimitInput.style.cssText = `width:35px;padding:2px 4px;border-radius:2px;font-size:11px;border:1px solid ${theme['--input-border']};outline:none;text-align:center;background:${theme['--input-bg']};color:${theme['--text-primary']};`;
         }
 
         // 更新命令列表样式
-        const commandItems = document.querySelectorAll('.command-item');
+        const commandItems = document.querySelectorAll('.trae-command-item');
         commandItems.forEach(item => {
             item.style.background = theme['--command-bg'];
             item.style.border = `1px solid ${theme['--command-border']}`;
         });
 
         // 更新命令文本颜色
-        const commandTexts = document.querySelectorAll('.command-text, .command-status');
+        const commandTexts = document.querySelectorAll('.trae-command-text, .trae-command-status');
         commandTexts.forEach(text => {
             text.style.color = theme['--text-primary'];
+        });
+
+        // 更新日志项颜色
+        const logItems = document.querySelectorAll('.trae-log-item');
+        logItems.forEach(item => {
+            if (item.classList.contains('success')) {
+                item.style.color = theme['--success'];
+            } else if (item.classList.contains('warning')) {
+                item.style.color = theme['--warning'];
+            } else {
+                item.style.color = theme['--text-tertiary'];
+            }
         });
 
         // 更新输入框焦点样式
@@ -213,10 +226,10 @@
         }
 
         const entry = document.createElement('div');
-        entry.className = `log-item ${logType}`;
+        entry.className = `trae-log-item ${logType}`;
         entry.innerHTML = `
-            <span class="log-time">${new Date().toLocaleTimeString()}</span>
-            <span class="log-text">${logIcon} ${cleanMsg}</span>
+            <span class="trae-log-time">${new Date().toLocaleTimeString()}</span>
+            <span class="trae-log-text">${logIcon} ${cleanMsg}</span>
         `;
 
         logList.appendChild(entry);
@@ -270,24 +283,29 @@
                 return false;
             }
 
-            if (layoutContainer.dataset.traeChatLayout === 'fixed') {
-                return true;
+            // 清理旧版本遗留的布局设置
+            if (layoutContainer.dataset.traeChatLayout === 'fixed' || !layoutContainer.dataset.traeLayoutCleaned) {
+                delete layoutContainer.dataset.traeChatLayout;
+                layoutContainer.style.removeProperty('display');
+                layoutContainer.style.removeProperty('grid-template-columns');
+                layoutContainer.style.removeProperty('column-gap');
+                layoutContainer.style.removeProperty('align-items');
+                layoutContainer.style.removeProperty('width');
+                layoutContainer.dataset.traeLayoutCleaned = '1';
             }
 
-            layoutContainer.dataset.traeChatLayout = 'fixed';
-            layoutContainer.style.display = 'grid';
-            layoutContainer.style.gridTemplateColumns = '1fr auto';
-            layoutContainer.style.columnGap = '12px';
-            layoutContainer.style.alignItems = 'stretch';
-            layoutContainer.style.width = '100%';
-
+            // 尽量减少对原始布局的干扰，仅保证输入区域和按钮的可用性
             inputContainer.style.minWidth = '0';
-            inputContainer.style.width = '100%';
+            if (inputContainer.style.width !== '100%') {
+                inputContainer.style.width = '100%';
+            }
 
             const editableWrapper = editable.parentElement;
             if (editableWrapper && editableWrapper !== inputContainer) {
                 editableWrapper.style.minWidth = '0';
-                editableWrapper.style.width = '100%';
+                if (editableWrapper.style.width !== '100%') {
+                    editableWrapper.style.width = '100%';
+                }
             }
 
             sendButton.style.alignSelf = 'stretch';
@@ -648,19 +666,19 @@
         commands.forEach((command) => {
             const commandItem = document.createElement('div');
             const isPending = command.status === 'pending';
-            commandItem.className = `command-item ${command.status === 'completed' ? 'completed' : ''}`;
+            commandItem.className = `trae-command-item ${command.status === 'completed' ? 'completed' : ''}`;
             commandItem.dataset.commandId = command.id;
 
             const statusIcon = command.status === 'completed' ? '✅' :
                 command.status === 'executing' ? '⏳' : '→';
 
             commandItem.innerHTML = `
-                <span class="drag-handle" style="display: ${isPending ? 'flex' : 'none'};" data-command-id="${command.id}" title="拖拽排序" draggable="${isPending}">⋮⋮</span>
-                <span class="command-status">${statusIcon}</span>
-                <span class="command-text"></span>
-                <span class="command-delete" onclick="removeCommand(${command.id})" title="删除">×</span>
+                <span class="trae-command-drag-handle" style="display: ${isPending ? 'flex' : 'none'};" data-command-id="${command.id}" title="拖拽排序" draggable="${isPending}">⋮⋮</span>
+                <span class="trae-command-status">${statusIcon}</span>
+                <span class="trae-command-text"></span>
+                <span class="trae-command-delete" onclick="removeCommand(${command.id})" title="删除">×</span>
             `;
-            const commandTextEl = commandItem.querySelector('.command-text');
+            const commandTextEl = commandItem.querySelector('.trae-command-text');
             if (commandTextEl) {
                 commandTextEl.textContent = command.text;
                 commandTextEl.setAttribute('title', command.text);
@@ -668,7 +686,7 @@
 
 
             if (isPending) {
-                const dragHandle = commandItem.querySelector('.drag-handle');
+                const dragHandle = commandItem.querySelector('.trae-command-drag-handle');
                 if (dragHandle) {
                     dragHandle.addEventListener('dragstart', (e) => handleCommandDragStart(e, command.id));
                     dragHandle.addEventListener('dragend', handleCommandDragEnd);
@@ -899,21 +917,24 @@
         try {
             const optimizeBtn = document.querySelector('.chat-input-v2-prompt-optimize-button');
             if (!optimizeBtn) {
-                log('ℹ️ 优化按钮不存在，直接准备发送');
-                waitForSendReady(command, 0);
+                if (attempt >= 30) {
+                    log('⚠️ 无法定位优化按钮，直接发送');
+                    waitForSendReady(command, 0);
+                    return;
+                }
+                setTimeout(() => {
+                    waitForOptimizationComplete(command, attempt + 1);
+                }, 500);
                 return;
             }
 
-            // 优化过程中按钮会被禁用，优化完成后会重新启用
-            const isOptimizing = optimizeBtn.disabled;
-
-            if (!isOptimizing) {
+            if (hasOptimizeUndoIcon(optimizeBtn)) {
                 log('✅ 优化完成，准备发送');
-                waitForSendReady(command, 0);
+                setTimeout(() => waitForSendReady(command, 0), 200);
                 return;
             }
 
-            if (attempt >= 30) { // 最多等待15秒 (30 * 500ms)
+            if (attempt >= 30) { // 最多等待约15秒 (30 * 500ms)
                 log('⚠️ 等待优化完成超时，直接发送');
                 waitForSendReady(command, 0);
                 return;
@@ -925,6 +946,17 @@
         } catch (error) {
             log(`❌ 等待优化完成失败: ${error.message}`);
             waitForSendReady(command, 0);
+        }
+    }
+
+    function hasOptimizeUndoIcon(optimizeBtn) {
+        try {
+            if (!optimizeBtn) return false;
+            const undoIcon = optimizeBtn.querySelector('span[class*="codicon-icube-undo" i]') ||
+                optimizeBtn.querySelector('span.codicon-icube-Undo');
+            return Boolean(undoIcon);
+        } catch (error) {
+            return false;
         }
     }
 
@@ -1588,46 +1620,21 @@
         applyPanelSize();
         updateSizeControls();
 
-        // 添加基础CSS样式 - 使用CSS变量
+        // 添加基础CSS样式 - 使用内联样式避免全局污染
         const style = document.createElement('style');
+        style.id = 'trae-panel-styles';
         style.textContent = `
-            :root {
-                /* 基础主题变量 - 会在applyTheme中动态更新 */
-                --bg-primary: #ffffff;
-                --bg-secondary: #f8f9fa;
-                --bg-tertiary: #f5f5f5;
-                --text-primary: #333333;
-                --text-secondary: #666666;
-                --text-tertiary: #8c8c8c;
-                --border-color: #e0e0e0;
-                --border-light: #ddd;
-                --shadow: 0 4px 6px rgba(0,0,0,0.1);
-                --success: #27ae60;
-                --warning: #e74c3c;
-                --info: #4096ff;
-                --panel-bg: #ffffff;
-                --panel-border: 1px solid #e0e0e0;
-                --input-bg: #fafafa;
-                --input-border: #e0e0e0;
-                --button-bg: transparent;
-                --button-border: 1px solid #ddd;
-                --log-bg: #fafafa;
-                --log-border: #e0e0e0;
-                --command-bg: #f5f7fa;
-                --command-border: #e0e0e0;
-            }
-
             /* 基础面板样式 */
             #trae-panel {
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                background: var(--panel-bg);
-                color: var(--text-primary);
+                background: #ffffff;
+                color: #333333;
                 padding: 20px;
                 border-radius: 12px;
-                box-shadow: var(--shadow);
-                border: var(--panel-border);
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                border: 1px solid #e0e0e0;
                 z-index: 999999;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 min-width: 340px;
@@ -1678,8 +1685,8 @@
 
             .trae-header-button {
                 background: transparent;
-                border: 1px solid var(--border-color);
-                color: var(--text-primary);
+                border: 1px solid #e0e0e0;
+                color: #333333;
                 padding: 4px 6px;
                 border-radius: 6px;
                 cursor: pointer;
@@ -1689,8 +1696,8 @@
             }
 
             .trae-header-button:hover:not(:disabled) {
-                background: var(--bg-tertiary);
-                color: var(--info);
+                background: #f5f5f5;
+                color: #4096ff;
             }
 
             .trae-header-button:disabled {
@@ -1863,7 +1870,7 @@
                 font-family: 'Monaco', 'Menlo', monospace;
             }
 
-            .log-item {
+            #trae-panel .trae-log-item {
                 display: flex;
                 text-align: left !important;
                 align-items: flex-start !important;
@@ -1875,11 +1882,11 @@
                 direction: ltr;
             }
 
-            .log-item.success { color: var(--success); }
-            .log-item.warning { color: var(--warning); }
-            .log-item.info { color: var(--text-tertiary); }
-            .log-item .log-time { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; min-width: 50px; }
-            .log-item .log-text {
+            #trae-panel .trae-log-item.success { color: var(--success); }
+            #trae-panel .trae-log-item.warning { color: var(--warning); }
+            #trae-panel .trae-log-item.info { color: var(--text-tertiary); }
+            #trae-panel .trae-log-item .trae-log-time { color: var(--text-tertiary); font-size: 10px; white-space: nowrap; min-width: 50px; }
+            #trae-panel .trae-log-item .trae-log-text {
                 flex: 1;
                 line-height: 1.4;
                 text-align: left !important;
@@ -2023,7 +2030,7 @@
                 padding: 12px 16px;
             }
 
-            .command-item {
+            #trae-panel .trae-command-item {
                 background: var(--command-bg);
                 border: 1px solid var(--command-border);
                 border-radius: 6px;
@@ -2036,29 +2043,29 @@
                 gap: 8px;
             }
 
-            .command-item:hover {
+            #trae-panel .trae-command-item:hover {
                 background: var(--bg-tertiary);
             }
 
-            .command-item.completed {
+            #trae-panel .trae-command-item.completed {
                 opacity: 0.6;
             }
 
-            .command-item.completed .command-text {
+            #trae-panel .trae-command-item.completed .trae-command-text {
                 color: var(--text-tertiary);
                 text-decoration: line-through;
             }
 
-            .command-item.dragging {
+            #trae-panel .trae-command-item.trae-dragging {
                 opacity: 0.5;
             }
 
-            .command-item.drag-over {
+            #trae-panel .trae-command-item.trae-drag-over {
                 border: 2px dashed var(--info);
                 background: rgba(64, 150, 255, 0.08);
             }
 
-            .command-item .drag-handle {
+            #trae-panel .trae-command-item .trae-command-drag-handle {
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -2071,21 +2078,21 @@
                 border-radius: 4px;
             }
 
-            .command-item .drag-handle:hover {
+            #trae-panel .trae-command-item .trae-command-drag-handle:hover {
                 background: rgba(64, 150, 255, 0.1);
                 color: var(--info);
             }
 
-            .command-item .drag-handle:active {
+            #trae-panel .trae-command-item .trae-command-drag-handle:active {
                 cursor: grabbing;
             }
 
-            .command-item .command-status {
+            #trae-panel .trae-command-item .trae-command-status {
                 font-size: 12px;
                 color: var(--text-secondary);
             }
 
-            .command-item .command-text {
+            #trae-panel .trae-command-item .trae-command-text {
                 font-size: 12px;
                 word-break: break-word;
                 cursor: text;
@@ -2096,22 +2103,22 @@
                 line-height: 1.5;
             }
 
-            #trae-panel[data-size="compact"] .command-item {
+            #trae-panel[data-size="compact"] .trae-command-item {
                 align-items: center;
                 grid-template-columns: auto auto 1fr auto;
             }
 
-            #trae-panel[data-size="compact"] .command-item .command-text {
+            #trae-panel[data-size="compact"] .trae-command-item .trae-command-text {
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
             }
 
-            #trae-panel[data-size="compact"] .command-item .command-status {
+            #trae-panel[data-size="compact"] .trae-command-item .trae-command-status {
                 align-self: center;
             }
 
-            .command-item .command-delete {
+            #trae-panel .trae-command-item .trae-command-delete {
                 color: var(--warning);
                 cursor: pointer;
                 font-size: 14px;
@@ -2120,7 +2127,7 @@
                 align-self: center;
             }
 
-            .command-item .command-delete:hover {
+            #trae-panel .trae-command-item .trae-command-delete:hover {
                 background: rgba(231, 76, 60, 0.12);
             }
 
@@ -2179,11 +2186,11 @@
             }
 
             /* 拖拽时的样式 */
-            .dragging {
+            #trae-panel .trae-dragging {
                 opacity: 0.5;
             }
 
-            .drag-over {
+            #trae-panel .trae-drag-over {
                 border: 2px dashed var(--info) !important;
                 background: rgba(64, 150, 255, 0.1) !important;
             }
@@ -2468,7 +2475,7 @@
         isCommandDragging = true;
         draggedCommand = commands.find(cmd => cmd.id === commandId);
         event.dataTransfer.effectAllowed = 'move';
-        const dragContainer = event.currentTarget && event.currentTarget.closest ? event.currentTarget.closest('.command-item') : event.currentTarget;
+        const dragContainer = event.currentTarget && event.currentTarget.closest ? event.currentTarget.closest('.trae-command-item') : event.currentTarget;
         if (dragContainer) {
             event.dataTransfer.setData('text/html', dragContainer.innerHTML);
         } else {
@@ -2477,7 +2484,7 @@
         event.dataTransfer.setData('commandId', commandId);
 
         if (dragContainer && dragContainer.classList) {
-            dragContainer.classList.add('dragging');
+            dragContainer.classList.add('trae-dragging');
         }
 
         event.stopPropagation();
@@ -2489,7 +2496,7 @@
         }
         const target = event.currentTarget;
         if (target && target.classList) {
-            target.classList.add('drag-over');
+            target.classList.add('trae-drag-over');
         }
         event.dataTransfer.dropEffect = 'move';
         return false;
@@ -2498,7 +2505,7 @@
     window.handleCommandDragLeave = function (event) {
         const target = event.currentTarget;
         if (target && target.classList) {
-            target.classList.remove('drag-over');
+            target.classList.remove('trae-drag-over');
         }
     };
 
@@ -2509,7 +2516,7 @@
 
         const targetElement = event.currentTarget;
         if (targetElement && targetElement.classList) {
-            targetElement.classList.remove('drag-over');
+            targetElement.classList.remove('trae-drag-over');
         }
 
         if (isCommandDragging && draggedCommand) {
@@ -2541,12 +2548,12 @@
 
     window.handleCommandDragEnd = function (event) {
         isCommandDragging = false;
-        const dragContainer = event && event.currentTarget && event.currentTarget.closest ? event.currentTarget.closest('.command-item') : null;
+        const dragContainer = event && event.currentTarget && event.currentTarget.closest ? event.currentTarget.closest('.trae-command-item') : null;
         if (dragContainer && dragContainer.classList) {
-            dragContainer.classList.remove('dragging');
-            dragContainer.classList.remove('drag-over');
+            dragContainer.classList.remove('trae-dragging');
+            dragContainer.classList.remove('trae-drag-over');
         }
-        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        document.querySelectorAll('.trae-drag-over').forEach(el => el.classList.remove('trae-drag-over'));
         draggedCommand = null;
     };
 
