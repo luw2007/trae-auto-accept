@@ -167,6 +167,44 @@
             }
         });
 
+        // 更新头部按钮样式 (A-, A+, -)
+        const headerButtons = document.querySelectorAll('.trae-header-button');
+        headerButtons.forEach(btn => {
+            btn.style.background = 'transparent';
+            btn.style.border = `1px solid ${theme['--border-color']}`;
+            btn.style.color = theme['--text-primary'];
+
+            // 添加hover效果
+            btn.onmouseenter = function() {
+                if (!this.disabled) {
+                    this.style.background = theme['--bg-tertiary'];
+                    this.style.color = theme['--info'];
+                }
+            };
+            btn.onmouseleave = function() {
+                this.style.background = 'transparent';
+                this.style.color = theme['--text-primary'];
+            };
+        });
+
+        // 更新最小化按钮样式
+        const minimizeBtnMinimized = document.getElementById('trae-minimize-minimized');
+        if (minimizeBtnMinimized) {
+            minimizeBtnMinimized.style.background = 'transparent';
+            minimizeBtnMinimized.style.border = `1px solid ${theme['--border-color']}`;
+            minimizeBtnMinimized.style.color = theme['--text-primary'];
+
+            // 添加hover效果
+            minimizeBtnMinimized.onmouseenter = function() {
+                this.style.background = theme['--bg-tertiary'];
+                this.style.color = theme['--info'];
+            };
+            minimizeBtnMinimized.onmouseleave = function() {
+                this.style.background = 'transparent';
+                this.style.color = theme['--text-primary'];
+            };
+        }
+
         // 更新输入框焦点样式
         if (commandInput) {
             // 移除之前的事件监听器
