@@ -2,7 +2,7 @@
     'use strict';
 
     const LOG_BUFFER_SIZE = 50;
-    let isRunning = false, interval, isDarkMode = false;
+    let isRunning = false, interval, isDarkMode = detectSystemTheme();
     let isDragging = false, dragOffset = { x: 0, y: 0 };
     let isCommandDragging = false, draggedCommand = null;
     let clickLimit = 5, clickCount = 0;
@@ -20,6 +20,77 @@
     let commandInputHotkey = null;
     let isBindingCommandHotkey = false;
 
+    // 自动检测系统/VSCode主题
+    function detectSystemTheme() {
+        try {
+            // 1. 检测 VSCode/Trae 的主题类
+            const bodyClassList = document.body?.classList;
+            if (bodyClassList) {
+                // 检查常见的暗色主题类名
+                const darkThemeClasses = [
+                    'vscode-dark',
+                    'dark-theme',
+                    'theme-dark',
+                    'monaco-dark',
+                    'vs-dark'
+                ];
+
+                for (const darkClass of darkThemeClasses) {
+                    if (bodyClassList.contains(darkClass)) {
+                        return true;
+                    }
+                }
+
+                // 检查浅色主题类名
+                const lightThemeClasses = [
+                    'vscode-light',
+                    'light-theme',
+                    'theme-light',
+                    'monaco-light',
+                    'vs-light'
+                ];
+
+                for (const lightClass of lightThemeClasses) {
+                    if (bodyClassList.contains(lightClass)) {
+                        return false;
+                    }
+                }
+            }
+
+            // 2. 检测HTML元素的data-theme属性
+            const htmlElement = document.documentElement;
+            const dataTheme = htmlElement?.getAttribute('data-theme');
+            if (dataTheme) {
+                return dataTheme.toLowerCase().includes('dark');
+            }
+
+            // 3. 通过CSS变量检测主题
+            const rootStyles = getComputedStyle(htmlElement || document.body);
+            const bgColor = rootStyles.getPropertyValue('--vscode-editor-background') ||
+                           rootStyles.getPropertyValue('--monaco-editor-background') ||
+                           rootStyles.backgroundColor;
+
+            if (bgColor) {
+                // 解析颜色值并判断明暗
+                const rgb = bgColor.match(/\d+/g);
+                if (rgb && rgb.length >= 3) {
+                    const brightness = (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
+                    return brightness < 128; // 小于128认为是暗色主题
+                }
+            }
+
+            // 4. 检测系统主题偏好
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                return true;
+            }
+
+            // 5. 默认返回浅色主题
+            return false;
+        } catch (error) {
+            console.warn('主题检测失败，使用浅色主题:', error);
+            return false;
+        }
+    }
 
     // 简洁的主题系统 - 使用CSS变量
     const THEMES = {
@@ -2500,6 +2571,7 @@
         document.addEventListener('mouseup', endPanelDrag);
 
         log('🎯 TraeCN 自动操作脚本已加载');
+        log(`🎨 自动检测主题: ${isDarkMode ? '暗色模式' : '浅色模式'}`);
         log(`📝 日志缓冲区: ${LOG_BUFFER_SIZE} 条`);
         log('✨ 支持功能: 自动点击继续、运行、接受按钮' + (enableDelete ? '、<span style="color: #e74c3c; font-weight: bold;">删除按钮</span>' : ''));
     }
@@ -2622,11 +2694,48 @@
         }
     };
 
+    // 监听系统主题变化
+    function setupThemeListener() {
+        try {
+            // 监听系统主题偏好变化
+            if (window.matchMedia) {
+                const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                mediaQuery.addEventListener('change', (e) => {
+                    const newDarkMode = e.matches;
+                    if (isDarkMode !== newDarkMode) {
+                        isDarkMode = newDarkMode;
+                        applyTheme();
+                        log(`🎨 主题已自动切换到${isDarkMode ? '暗色模式' : '浅色模式'}`);
+                    }
+                });
+            }
+
+            // 监听DOM变化以检测VSCode主题切换
+            const observer = new MutationObserver(() => {
+                const detectedTheme = detectSystemTheme();
+                if (isDarkMode !== detectedTheme) {
+                    isDarkMode = detectedTheme;
+                    applyTheme();
+                    log(`🎨 检测到IDE主题变化，已切换到${isDarkMode ? '暗色模式' : '浅色模式'}`);
+                }
+            });
+
+            observer.observe(document.body || document.documentElement, {
+                attributes: true,
+                attributeFilter: ['class', 'data-theme'],
+                subtree: false
+            });
+        } catch (error) {
+            console.warn('主题监听器设置失败:', error);
+        }
+    }
+
     loadCommandHotkey();
     updateCommandHotkeyUI();
     document.removeEventListener('keydown', handleGlobalHotkey, true);
     document.addEventListener('keydown', handleGlobalHotkey, true);
 
+    setupThemeListener();
     createPanel();
     startChatLayoutObserver();
 
