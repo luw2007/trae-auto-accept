@@ -5,6 +5,7 @@ const path = require('path');
 let interval;
 let isRunning = false;
 let outputChannel;
+let devToolsTimeout1, devToolsTimeout2;
 
 function activate(context) {
     console.log('Trae Auto Accept 扩展已激活');
@@ -48,6 +49,14 @@ function activate(context) {
             clearInterval(interval);
             interval = null;
         }
+        if (devToolsTimeout1) {
+            clearTimeout(devToolsTimeout1);
+            devToolsTimeout1 = null;
+        }
+        if (devToolsTimeout2) {
+            clearTimeout(devToolsTimeout2);
+            devToolsTimeout2 = null;
+        }
         isRunning = false;
         outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] ⏹️ Trae 自动接受已停止`);
         vscode.window.showInformationMessage('Trae 自动接受已停止');
@@ -62,6 +71,12 @@ function activate(context) {
         dispose: () => {
             if (interval) {
                 clearInterval(interval);
+            }
+            if (devToolsTimeout1) {
+                clearTimeout(devToolsTimeout1);
+            }
+            if (devToolsTimeout2) {
+                clearTimeout(devToolsTimeout2);
             }
             isRunning = false;
             if (outputChannel) {
@@ -86,11 +101,11 @@ function copyBrowserScriptToClipboard(context) {
         outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] 📋 浏览器脚本（压缩版）已复制到剪贴板`);
         
         // 打开开发人员工具
-        setTimeout(() => {
+        devToolsTimeout1 = setTimeout(() => {
             vscode.commands.executeCommand('workbench.action.toggleDevTools');
-            
+
             // 15秒后自动关闭控制台
-            setTimeout(() => {
+            devToolsTimeout2 = setTimeout(() => {
                 vscode.commands.executeCommand('workbench.action.toggleDevTools');
                 outputChannel.appendLine(`[${new Date().toLocaleTimeString()}] 🔧 控制台已自动关闭`);
             }, 15000);
@@ -109,6 +124,12 @@ function findAndClickAcceptButton() {
 function deactivate() {
     if (interval) {
         clearInterval(interval);
+    }
+    if (devToolsTimeout1) {
+        clearTimeout(devToolsTimeout1);
+    }
+    if (devToolsTimeout2) {
+        clearTimeout(devToolsTimeout2);
     }
     isRunning = false;
     if (outputChannel) {

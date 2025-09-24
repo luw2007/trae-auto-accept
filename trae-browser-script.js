@@ -2,6 +2,7 @@
     'use strict';
 
     const LOG_BUFFER_SIZE = 50;
+    const MAX_COMMANDS = 100; // 命令数组最大大小限制
     let isRunning = false, interval, isDarkMode = detectSystemTheme();
     let isDragging = false, dragOffset = { x: 0, y: 0 };
     let isCommandDragging = false, draggedCommand = null;
@@ -10,6 +11,11 @@
     let commands = [];
     let isPanelMinimized = false;
     let chatLayoutObserver = null;
+
+    // Timeout和事件监听器管理
+    const activeTimeouts = new Set();
+    const eventListeners = [];
+    let logCollapseTimer = null;
     const PANEL_SIZES = [
         { width: 340, logMax: 120, commandMax: 160 },
         { width: 400, logMax: 160, commandMax: 220 },
@@ -20,6 +26,97 @@
     let commandInputHotkey = null;
     let isBindingCommandHotkey = false;
     let isPromptOptimizationEnabled = true;
+
+    // 统一的Timeout管理函数
+    function managedSetTimeout(callback, delay) {
+        const timeoutId = managedSetTimeout(() => {
+            activeTimeouts.delete(timeoutId);
+            try {
+                callback();
+            } catch (error) {
+                console.error('Managed managedSetTimeout callback error:', error);
+                log(`❌ 定时器执行错误: ${error.message}`);
+            }
+        }, delay);
+        activeTimeouts.add(timeoutId);
+        return timeoutId;
+    }
+
+    function clearManagedTimeout(timeoutId) {
+        if (timeoutId && activeTimeouts.has(timeoutId)) {
+            clearTimeout(timeoutId);
+            activeTimeouts.delete(timeoutId);
+        }
+    }
+
+    function clearAllTimeouts() {
+        activeTimeouts.forEach(id => {
+            try {
+                clearTimeout(id);
+            } catch (error) {
+                console.warn('Error clearing timeout:', error);
+            }
+        });
+        activeTimeouts.clear();
+
+        // 清理特殊的定时器
+        if (logCollapseTimer) {
+            clearTimeout(logCollapseTimer);
+            logCollapseTimer = null;
+        }
+    }
+
+    // 统一的错误处理包装器
+    function safeExecute(operation, operationName) {
+        try {
+            return operation();
+        } catch (error) {
+            console.error(`Error in ${operationName}:`, error);
+            log(`❌ ${operationName}执行失败: ${error.message}`);
+            return false;
+        }
+    }
+
+    // 异步操作错误处理包装器
+    function safeExecuteAsync(operation, operationName, fallback) {
+        try {
+            return operation();
+        } catch (error) {
+            console.error(`Error in ${operationName}:`, error);
+            log(`❌ ${operationName}执行失败: ${error.message}`);
+            if (typeof fallback === 'function') {
+                return fallback();
+            }
+            return false;
+        }
+    }
+
+    // 统一的事件监听器管理函数
+    function addManagedEventListener(target, event, handler, options) {
+        try {
+            target.addEventListener(event, handler, options);
+            eventListeners.push({ target, event, handler, options });
+        } catch (error) {
+            console.error('Error adding event listener:', error);
+            log(`❌ 添加事件监听器失败: ${error.message}`);
+        }
+    }
+
+    function removeAllEventListeners() {
+        let removedCount = 0;
+        eventListeners.forEach(({ target, event, handler }) => {
+            try {
+                if (target && typeof target.removeEventListener === 'function') {
+                    target.removeEventListener(event, handler);
+                    removedCount++;
+                }
+            } catch (error) {
+                console.warn('Error removing event listener:', error);
+            }
+        });
+        eventListeners.length = 0;
+        console.log(`清理了 ${removedCount} 个事件监听器`);
+    }
 
     // 自动检测系统/VSCode主题
     function detectSystemTheme() {
@@ -455,7 +552,7 @@
         tryApplyLayout();
 
         if (!document.body) {
-            setTimeout(startChatLayoutObserver, 50);
+            managedSetTimeout(startChatLayoutObserver, 50);
             return;
         }
 
@@ -716,7 +813,7 @@
 
         if (isPanelMinimized) {
             minimize();
-            setTimeout(() => {
+            managedSetTimeout(() => {
                 if (typeof window.focusCommandInputArea === 'function') {
                     window.focusCommandInputArea();
                 } else {
@@ -752,6 +849,20 @@
         if (existingCommand) {
             log('⚠️ 命令已存在，无需重复添加');
             return;
+        }
+
+        // 检查命令数组大小限制
+        if (commands.length >= MAX_COMMANDS) {
+            // 删除最旧的已完成命令
+            const completedIndex = commands.findIndex(cmd => cmd.status === 'completed');
+            if (completedIndex !== -1) {
+                const removedCommand = commands.splice(completedIndex, 1)[0];
+                log(`⚠️ 命令队列已满，删除已完成命令: ${removedCommand.text.substring(0, 20)}...`);
+            } else {
+                // 如果没有已完成的命令，删除最旧的命令
+                const removedCommand = commands.shift();
+                log(`⚠️ 命令队列已满，删除最旧命令: ${removedCommand.text.substring(0, 20)}...`);
+            }
         }
 
         commands.push({
@@ -979,7 +1090,7 @@
             log('✅ 命令已插入，等待界面响应...');
 
             // 等待界面响应后再检查发送状态
-            setTimeout(() => {
+            managedSetTimeout(() => {
                 scheduleOptimizeAndSend(command);
             }, 1000);
 
@@ -1034,7 +1145,7 @@
                 return;
             }
 
-            setTimeout(() => {
+            managedSetTimeout(() => {
                 attemptPromptOptimization(command, attempt + 1);
             }, 300);
             return;
@@ -1053,7 +1164,7 @@
                     waitForSendReady(command, 0);
                     return;
                 }
-                setTimeout(() => {
+                managedSetTimeout(() => {
                     waitForOptimizationComplete(command, attempt + 1);
                 }, 500);
                 return;
@@ -1061,7 +1172,7 @@
 
             if (hasOptimizeUndoIcon(optimizeBtn)) {
                 log('✅ 优化完成，准备发送');
-                setTimeout(() => waitForSendReady(command, 0), 200);
+                managedSetTimeout(() => waitForSendReady(command, 0), 200);
                 return;
             }
 
@@ -1071,7 +1182,7 @@
                 return;
             }
 
-            setTimeout(() => {
+            managedSetTimeout(() => {
                 waitForOptimizationComplete(command, attempt + 1);
             }, 500);
         } catch (error) {
@@ -1119,7 +1230,7 @@
                 return false;
             }
 
-            setTimeout(() => {
+            managedSetTimeout(() => {
                 waitForSendReady(command, attempt + 1);
             }, 300);
             return false;
@@ -1304,7 +1415,7 @@
 
     function checkClickLimitAfterClick() {
         if (clickLimit > 0 && clickCount >= clickLimit) {
-            setTimeout(() => {
+            managedSetTimeout(() => {
                 clickCount = 0;
                 updateMinimizedTitle();
                 stop(true);
@@ -1350,7 +1461,7 @@
         interval = setInterval(findAndClick, 5000);
         findAndClick();
 
-        setTimeout(() => {
+        managedSetTimeout(() => {
             if (!isPanelMinimized) {
                 minimize();
                 log('📱 自动收起控制面板');
@@ -1543,7 +1654,7 @@
         `;
 
         countWrapper.appendChild(plusOne);
-        setTimeout(() => {
+        managedSetTimeout(() => {
             if (plusOne && plusOne.parentNode) {
                 plusOne.remove();
             }
@@ -1601,6 +1712,11 @@
         if (!confirm('确定要退出 TraeCN 自动操作吗？')) return;
 
         stop();
+
+        // 清理所有管理的资源
+        clearAllTimeouts();
+        removeAllEventListeners();
+
         document.removeEventListener('keydown', handleGlobalHotkey, true);
         cancelCommandHotkeyBinding(false);
         window.focusCommandInputArea = undefined;
@@ -2602,7 +2718,6 @@
         const controls = document.getElementById('trae-controls');
 
         // 抽屉日志自动收起逻辑
-        let logCollapseTimer = null;
         let isLogExpanded = false;
 
         // 命令管理折叠状态
@@ -2624,9 +2739,9 @@
 
                 // 重置自动收起计时器
                 if (logCollapseTimer) {
-                    clearTimeout(logCollapseTimer);
+                    clearManagedTimeout(logCollapseTimer);
                 }
-                logCollapseTimer = setTimeout(() => {
+                logCollapseTimer = managedSetTimeout(() => {
                     collapseLog();
                 }, 5000);
             }
@@ -2672,7 +2787,7 @@
             if (isLogExpanded) {
                 collapseLog();
                 if (logCollapseTimer) {
-                    clearTimeout(logCollapseTimer);
+                    clearManagedTimeout(logCollapseTimer);
                 }
             } else {
                 expandLog();
@@ -2693,7 +2808,7 @@
             if (isLogExpanded && !e.target.closest('#trae-log-drawer')) {
                 collapseLog();
                 if (logCollapseTimer) {
-                    clearTimeout(logCollapseTimer);
+                    clearManagedTimeout(logCollapseTimer);
                 }
             }
         });
@@ -2951,7 +3066,7 @@
             // 监听系统主题偏好变化
             if (window.matchMedia) {
                 const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-                mediaQuery.addEventListener('change', (e) => {
+                addManagedEventListener(mediaQuery, 'change', (e) => {
                     const newDarkMode = e.matches;
                     if (isDarkMode !== newDarkMode) {
                         isDarkMode = newDarkMode;
@@ -2984,7 +3099,7 @@
     loadCommandHotkey();
     updateCommandHotkeyUI();
     document.removeEventListener('keydown', handleGlobalHotkey, true);
-    document.addEventListener('keydown', handleGlobalHotkey, true);
+    addManagedEventListener(document, 'keydown', handleGlobalHotkey, true);
 
     setupThemeListener();
     createPanel();
