@@ -1,8 +1,8 @@
 {
     "name": "trae-auto-accept",
     "displayName": "Trae Auto Accept",
-    "description": "TraeCN 自动点击'接受全部'和'继续'按钮",
-    "version": "1.13.0",
+    "description": "TraeCN 自动点击'接受全部'和'继续'按钮,支持异步任务队列",
+    "version": "1.13.1",
     "publisher": "luw2007",
     "engines": {
         "vscode": "^1.74.0"

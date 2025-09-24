@@ -11,14 +11,15 @@
     let isPanelMinimized = false;
     let chatLayoutObserver = null;
     const PANEL_SIZES = [
-        { width: 360, logMax: 140, commandMax: 200 },
-        { width: 420, logMax: 180, commandMax: 240 },
-        { width: 540, logMax: 240, commandMax: 320 }
+        { width: 340, logMax: 120, commandMax: 160 },
+        { width: 400, logMax: 160, commandMax: 220 },
+        { width: 520, logMax: 220, commandMax: 300 }
     ];
     let panelSizeIndex = 1;
     const COMMAND_HOTKEY_STORAGE_KEY = 'trae-command-input-hotkey';
     let commandInputHotkey = null;
     let isBindingCommandHotkey = false;
+    let isPromptOptimizationEnabled = true;
 
     // 自动检测系统/VSCode主题
     function detectSystemTheme() {
@@ -183,6 +184,20 @@
             const buttonColor = isRunning ? theme['--text-tertiary'] : theme['--success'];
             toggleBtn.style.cssText = `background:${theme['--button-bg']};border:1px solid ${buttonColor};color:${buttonColor};padding:8px 12px;margin:2px;border-radius:4px;cursor:pointer;font-weight:bold`;
             toggleBtn.textContent = isRunning ? '停止' : '启动';
+        }
+
+        // 更新主题按钮样式
+        const themeBtn = document.getElementById('trae-theme');
+        if (themeBtn) {
+            const themeColor = theme['--border-color'];
+            themeBtn.style.cssText = `background:${theme['--button-bg']};border:1px solid ${themeColor};color:${theme['--text-secondary']};padding:10px 16px;margin:2px;border-radius:8px;cursor:pointer;font-weight:600;transition:all 0.2s ease;white-space:nowrap`;
+        }
+
+        // 更新退出按钮样式
+        const exitBtn = document.getElementById('trae-exit');
+        if (exitBtn) {
+            const exitColor = theme['--warning'];
+            exitBtn.style.cssText = `background:${theme['--button-bg']};border:1px solid ${exitColor};color:${exitColor};padding:10px 16px;margin:2px;border-radius:8px;cursor:pointer;font-weight:600;transition:all 0.2s ease;white-space:nowrap`;
         }
 
         // 更新输入框焦点样式
@@ -591,7 +606,7 @@
         if (!hotkeyButton) return;
 
         if (isBindingCommandHotkey) {
-            hotkeyButton.textContent = '⌛ 等待按键，Esc 清除';
+            hotkeyButton.textContent = '等待按键，Esc 清除';
             hotkeyButton.dataset.state = 'binding';
             hotkeyButton.title = '按下组合键设置快捷键，Esc 清除当前快捷键';
         } else if (commandInputHotkey) {
@@ -990,6 +1005,13 @@
     }
 
     function attemptPromptOptimization(command, attempt) {
+        // 检查是否启用了Prompt优化功能
+        if (!isPromptOptimizationEnabled) {
+            log('ℹ️ Prompt优化功能未启用，跳过优化');
+            waitForSendReady(command, 0);
+            return;
+        }
+
         try {
             const optimizeBtn = document.querySelector('.chat-input-v2-prompt-optimize-button');
             if (isButtonInteractive(optimizeBtn)) {
@@ -1160,9 +1182,34 @@
         { name: '继续', selector: 'div.agent-error-wrap div.icube-alert-action', validate: (b) => b.textContent.trim() === '继续' },
         { name: '运行', selector: 'div.icd-run-command-card-v2-actions button.icd-run-command-card-v2-actions-btn-run', validate: (b) => b.textContent.trim() === '运行' },
         {
-            name: '全部接受', selector: 'div.chat-todolist-bar button.icd-btn-primary', validate: (b) => {
+            name: '全部接受',
+            selectors: [
+                'div.chat-todolist-bar button.icd-btn-primary',
+                'button[class*="todoListBar-module__todo-list-bar_accept-btn"]',
+                'div[class*="todo-list-bar"] button.icd-btn-primary'
+            ],
+            validate: (b) => {
                 const span = b.querySelector('span.icd-btn-content');
-                return (span ? span.textContent.trim() : '') === '全部接受';
+                if (span && span.textContent.trim() === '全部接受') {
+                    return true;
+                }
+
+                const tooltipText = (b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('data-icubetooltip') || '');
+                if (tooltipText.includes('全部接受')) {
+                    return true;
+                }
+
+                if (b.classList && b.classList.contains('icd-btn-primary')) {
+                    const icon = b.querySelector('.codicon-icube-Check');
+                    if (icon) {
+                        const container = b.closest('div[class*="todo-list-bar"]');
+                        if (container) {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
             }
         },
         {
@@ -1175,8 +1222,14 @@
 
     function findButton(config) {
         try {
-            const button = document.querySelector(config.selector);
-            return button && isButtonVisible(button) && config.validate(button) ? button : null;
+            const selectors = config.selectors || (config.selector ? [config.selector] : []);
+            for (const selector of selectors) {
+                const button = document.querySelector(selector);
+                if (button && isButtonVisible(button) && config.validate(button)) {
+                    return button;
+                }
+            }
+            return null;
         } catch (error) {
             log(`❌ 查找${config.name}按钮错误: ${error.message}`);
             return null;
@@ -1643,20 +1696,16 @@
             </div>
             <div id="trae-controls">
                 <!-- 功能入口和配置区域 -->
-                <div style="display: flex; justify-content: center; align-items: center; gap: 30px;">
+                <div class="trae-controls-top-row">
                     <!-- 功能入口按钮组 -->
-                    <div style="display: flex; gap: 8px;">
-                        <button id="trae-toggle" style="background: transparent; color: var(--text-primary); padding: 10px 16px; margin: 2px; border-radius: 8px; cursor: pointer; font-weight: 600; border: none; transition: all 0.2s ease;">启动</button>
-                    <button id="trae-theme" style="background: transparent; color: var(--text-primary); padding: 10px 16px; margin: 2px; border-radius: 8px; cursor: pointer; font-weight: 600; border: 1px solid var(--border-color); transition: all 0.2s ease;">主题</button>
-                    <button id="trae-exit" style="background: transparent; color: var(--warning); padding: 10px 16px; margin: 2px; border-radius: 8px; cursor: pointer; font-weight: 600; border: 1px solid var(--warning); transition: all 0.2s ease;">退出</button>
+                    <div class="trae-action-group">
+                        <button id="trae-toggle">启动</button>
+                        <button id="trae-theme">主题</button>
+                        <button id="trae-exit">退出</button>
                     </div>
 
-                    <!-- 配置选项区域 -->
-                    <div style="display: flex; flex-direction: column; gap: 6px;">
-                        <div class="trae-config-row">
-                            <span>自动删除</span>
-                            <input type="checkbox" id="trae-enable-delete">
-                        </div>
+                    <!-- 配置选项区域 - 2行2列布局 -->
+                    <div class="trae-config-grid">
                         <div class="trae-config-row">
                             <span>限额</span>
                             <input type="number" id="trae-click-limit" min="0" max="99" value="5">
@@ -1664,6 +1713,14 @@
                         <div class="trae-config-row">
                             <span>快捷键</span>
                             <button id="trae-command-hotkey-button" class="trae-hotkey-inline-button" data-state="empty">[点击设置]</button>
+                        </div>
+                        <div class="trae-config-row">
+                            <span>自动删除</span>
+                            <input type="checkbox" id="trae-enable-delete">
+                        </div>
+                        <div class="trae-config-row">
+                            <span>Prompt优化</span>
+                            <button id="trae-prompt-toggle" class="trae-prompt-toggle-btn active">已启用</button>
                         </div>
                     </div>
                 </div>
@@ -1740,22 +1797,23 @@
                 right: 20px;
                 background: #ffffff;
                 color: #333333;
-                padding: 20px;
+                padding: 16px;
                 border-radius: 12px;
                 box-shadow: 0 4px 6px rgba(0,0,0,0.1);
                 border: 1px solid #e0e0e0;
                 z-index: 999999;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                min-width: 340px;
-                max-width: 70vw;
-                width: 420px;
+                min-width: 320px;
+                max-width: min(90vw, 600px);
+                width: 400px;
                 transition: all 0.3s ease;
                 display: flex;
                 flex-direction: column;
                 gap: 12px;
                 backdrop-filter: blur(10px);
-                max-height: 85vh;
+                max-height: 90vh;
                 overflow: hidden;
+                box-sizing: border-box;
             }
 
             #trae-panel.trae-panel-dragging {
@@ -1850,15 +1908,27 @@
                 cursor: pointer;
                 font-weight: 600;
                 transition: all 0.2s ease;
+                white-space: nowrap;
             }
 
             #trae-theme {
                 border: 1px solid var(--border-color);
+                color: var(--text-secondary);
+            }
+
+            #trae-theme:hover:not(:disabled) {
+                border-color: var(--text-tertiary);
+                color: var(--text-primary);
             }
 
             #trae-exit {
                 border: 1px solid var(--warning);
                 color: var(--warning);
+            }
+
+            #trae-exit:hover:not(:disabled) {
+                border-color: #d64541;
+                color: #d64541;
             }
 
             /* 状态图标 */
@@ -1881,29 +1951,66 @@
                 gap: 15px;
             }
 
-            #trae-controls > div:first-child {
+            .trae-controls-top-row {
                 display: flex;
-                justify-content: center;
-                align-items: center;
-                gap: 30px;
+                flex-wrap: wrap;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 12px;
+                min-height: 60px;
             }
 
-            /* 配置选项 */
-            #trae-controls > div > div:last-child {
+            .trae-action-group {
                 display: flex;
-                flex-direction: column;
                 gap: 6px;
-            }
-
-            #trae-controls > div > div:last-child > div {
-                display: flex;
                 align-items: center;
-                gap: 4px;
+                flex-wrap: wrap;
+                flex: 0 1 auto;
+                min-width: 200px;
             }
 
             #trae-controls span {
                 font-size: 10px;
                 color: var(--text-tertiary);
+            }
+
+            #trae-panel[data-size="compact"] .trae-controls-top-row,
+            #trae-panel[data-size="medium"] .trae-controls-top-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+                min-height: auto;
+            }
+
+            #trae-panel[data-size="compact"] .trae-action-group,
+            #trae-panel[data-size="medium"] .trae-action-group {
+                justify-content: flex-start;
+                align-items: center;
+                gap: 8px;
+                width: auto;
+                flex-wrap: nowrap;
+                min-width: auto;
+            }
+
+            #trae-panel[data-size="compact"] .trae-action-group button,
+            #trae-panel[data-size="medium"] .trae-action-group button {
+                flex: 0 0 auto;
+                min-width: 70px;
+                max-width: 120px;
+                width: auto;
+            }
+
+            #trae-panel[data-size="compact"] .trae-config-grid,
+            #trae-panel[data-size="medium"] .trae-config-grid {
+                width: 100%;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 6px 8px;
+            }
+
+            #trae-panel[data-size="compact"] .trae-config-row,
+            #trae-panel[data-size="medium"] .trae-config-row {
+                padding: 2px 4px;
+                min-height: 22px;
             }
 
             #trae-enable-delete {
@@ -2012,42 +2119,102 @@
                 display: flex;
                 flex-direction: column;
                 gap: 0;
+                margin-top: 12px;
             }
 
     
+            /* Prompt优化按钮样式 */
+            .trae-prompt-toggle-btn {
+                background: var(--bg-secondary);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 1px 6px;
+                border-radius: 3px;
+                font-size: 9px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                min-width: 45px;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .trae-prompt-toggle-btn:hover {
+                background: var(--hover-bg);
+                border-color: var(--hover-border);
+            }
+
+            .trae-prompt-toggle-btn.active {
+                background: var(--success);
+                color: white;
+                border-color: var(--success);
+            }
+
+            .trae-prompt-toggle-btn.active:hover {
+                background: var(--success-hover);
+                border-color: var(--success-hover);
+            }
+
+            /* 配置网格布局 */
+            .trae-config-grid {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                column-gap: 8px;
+                row-gap: 8px;
+                align-items: stretch;
+                justify-items: stretch;
+                flex: 1 1 auto;
+                max-width: 100%;
+                width: 100%;
+            }
+
+            /* 配置行样式优化 */
             .trae-config-row {
                 display: flex;
                 align-items: center;
+                justify-content: space-between;
                 gap: 6px;
-                font-size: 12px;
+                font-size: 11px;
                 color: var(--text-secondary);
+                min-height: 24px;
+                padding: 2px 6px;
+                width: 100%;
             }
 
             .trae-config-row > span {
-                min-width: 48px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0 4px;
                 color: var(--text-primary);
+                font-size: 10px;
+                white-space: nowrap;
             }
 
             .trae-config-row input[type="number"] {
-                width: 50px;
+                width: 46px;
                 padding: 2px 4px;
                 border-radius: 3px;
                 border: 1px solid var(--input-border);
                 background: var(--input-bg);
                 color: var(--text-primary);
-                font-size: 12px;
+                font-size: 10px;
             }
 
             .trae-hotkey-inline-button {
                 border: 1px solid var(--border-color);
                 background: var(--bg-secondary);
                 color: var(--text-primary);
-                padding: 2px 8px;
-                border-radius: 4px;
+                padding: 2px 6px;
+                border-radius: 3px;
                 cursor: pointer;
-                font-size: 12px;
+                font-size: 10px;
                 line-height: 1.4;
                 transition: all 0.2s ease;
+                min-width: 60px;
+                max-width: 95px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
 
             .trae-hotkey-inline-button[data-state="empty"] {
@@ -2071,7 +2238,7 @@
 
             #trae-command-input {
                 height: 60px;
-                padding: 0;
+                padding: 4px 8px;
                 border-radius: 6px;
                 font-size: 13px;
                 border: 2px solid var(--input-border);
@@ -2125,6 +2292,20 @@
                 background: #c0c4cc;
                 cursor: not-allowed;
                 box-shadow: none;
+            }
+
+            /* CSS变量定义 */
+            :root {
+                --success: #27ae60;
+                --success-hover: #219a52;
+                --hover-bg: rgba(0, 0, 0, 0.05);
+                --hover-border: rgba(0, 0, 0, 0.15);
+            }
+
+            /* 暗色主题变量 */
+            [data-theme="dark"] {
+                --hover-bg: rgba(255, 255, 255, 0.1);
+                --hover-border: rgba(255, 255, 255, 0.2);
             }
 
             /* 命令列表 */
@@ -2350,6 +2531,54 @@
                 max-height: 60px !important;
                 height: 60px !important;
             }
+
+            /* 移动端和小屏幕适配 */
+            @media (max-width: 768px) {
+                #trae-panel {
+                    left: 10px !important;
+                    right: 10px !important;
+                    top: 10px !important;
+                    width: calc(100vw - 20px) !important;
+                    max-width: calc(100vw - 20px) !important;
+                    min-width: 280px !important;
+                }
+
+                .trae-controls-top-row {
+                    flex-direction: column !important;
+                    align-items: stretch !important;
+                    gap: 8px !important;
+                }
+
+                .trae-action-group {
+                    flex-wrap: wrap !important;
+                    justify-content: center !important;
+                    gap: 4px !important;
+                }
+
+                .trae-config-grid {
+                    grid-template-columns: 1fr !important;
+                    gap: 6px !important;
+                }
+
+                .trae-config-row {
+                    justify-content: space-between !important;
+                    padding: 4px 8px !important;
+                }
+            }
+
+            @media (max-width: 480px) {
+                #trae-panel {
+                    padding: 12px !important;
+                    gap: 8px !important;
+                }
+
+                .trae-action-group button {
+                    flex: 1 1 auto !important;
+                    min-width: 60px !important;
+                    font-size: 12px !important;
+                    padding: 6px 8px !important;
+                }
+            }
         `;
         document.head.appendChild(style);
 
@@ -2362,6 +2591,7 @@
         const deleteCheckbox = document.getElementById('trae-enable-delete');
         const commandInput = document.getElementById('trae-command-input');
         const hotkeyButton = document.getElementById('trae-command-hotkey-button');
+        const promptToggle = document.getElementById('trae-prompt-toggle');
         const logToggle = document.getElementById('trae-log-toggle');
         const logContent = document.getElementById('trae-log-content');
         const logArrow = document.getElementById('trae-log-arrow');
@@ -2507,9 +2737,30 @@
             });
         }
 
+        if (promptToggle) {
+            promptToggle.addEventListener('click', e => {
+                e.stopPropagation();
+                isPromptOptimizationEnabled = !isPromptOptimizationEnabled;
+                promptToggle.textContent = isPromptOptimizationEnabled ? '已启用' : '启用';
+                promptToggle.classList.toggle('active', isPromptOptimizationEnabled);
+
+                if (isPromptOptimizationEnabled) {
+                    log('✨ Prompt优化功能已启用');
+                } else {
+                    log('⚪ Prompt优化功能已关闭');
+                }
+            });
+        }
+
         updateMinimizeButton(false);
         applyTheme();
         updateMinimizedTitle();
+
+        // 初始化Prompt优化按钮状态
+        if (promptToggle) {
+            promptToggle.textContent = isPromptOptimizationEnabled ? '已启用' : '启用';
+            promptToggle.classList.toggle('active', isPromptOptimizationEnabled);
+        }
 
         if (logContent) {
             logContent.style.display = 'none';
