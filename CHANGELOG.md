@@ -5,6 +5,12 @@ All notable changes to the "Trae Auto Accept" extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.3] - 2025-10-31
+
+### 🐛 Fixed
+- 修复浏览器脚本堆栈溢出错误：managedSetTimeout 无限递归问题
+- 防止脚本执行时崩溃和卡死
+
 ## [1.13.2] - 2025-10-31
 
 ### 🔧 Changed

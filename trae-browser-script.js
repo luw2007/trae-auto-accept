@@ -29,7 +29,7 @@
 
     // 统一的Timeout管理函数
     function managedSetTimeout(callback, delay) {
-        const timeoutId = managedSetTimeout(() => {
+        const timeoutId = setTimeout(() => {
             activeTimeouts.delete(timeoutId);
             try {
                 callback();
