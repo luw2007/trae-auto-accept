@@ -18,7 +18,7 @@
     let logCollapseTimer = null;
     const PANEL_SIZES = [
         { width: 340, logMax: 120, commandMax: 160 },
-        { width: 400, logMax: 160, commandMax: 220 },
+        { width: 440, logMax: 160, commandMax: 220 },
         { width: 520, logMax: 220, commandMax: 300 }
     ];
     let panelSizeIndex = 1;
@@ -1921,7 +1921,7 @@
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 min-width: 320px;
                 max-width: min(90vw, 600px);
-                width: 400px;
+                width: 440px;
                 transition: all 0.3s ease;
                 display: flex;
                 flex-direction: column;
@@ -2071,7 +2071,7 @@
                 display: flex;
                 flex-wrap: wrap;
                 align-items: flex-start;
-                justify-content: space-between;
+                justify-content: flex-start;
                 gap: 12px;
                 min-height: 60px;
             }
@@ -2090,16 +2090,46 @@
                 color: var(--text-tertiary);
             }
 
-            #trae-panel[data-size="compact"] .trae-controls-top-row,
-            #trae-panel[data-size="medium"] .trae-controls-top-row {
+            /* 中面板和大面板水平布局：按钮组和配置并排显示 */
+            #trae-panel[data-size="medium"] .trae-controls-top-row,
+            #trae-panel[data-size="large"] .trae-controls-top-row {
+                flex-direction: row;
+                align-items: flex-start;
+                justify-content: flex-start;
+                gap: 14px;
+                min-height: 60px;
+                flex-wrap: nowrap;
+            }
+
+            #trae-panel[data-size="medium"] .trae-action-group,
+            #trae-panel[data-size="large"] .trae-action-group {
+                flex: 0 0 auto;
+                min-width: 180px;
+            }
+
+            #trae-panel[data-size="medium"] .trae-config-grid {
+                flex: 1 1 auto;
+                max-width: 230px;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 6px 6px;
+            }
+
+            #trae-panel[data-size="large"] .trae-config-grid {
+                flex: 1 1 auto;
+                max-width: 280px;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 6px 8px;
+            }
+
+            /* 小面板垂直布局 */
+            #trae-panel[data-size="compact"] .trae-controls-top-row {
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 10px;
                 min-height: auto;
             }
 
-            #trae-panel[data-size="compact"] .trae-action-group,
-            #trae-panel[data-size="medium"] .trae-action-group {
+            #trae-panel[data-size="compact"] .trae-action-group {
                 justify-content: flex-start;
                 align-items: center;
                 gap: 8px;
@@ -2108,23 +2138,20 @@
                 min-width: auto;
             }
 
-            #trae-panel[data-size="compact"] .trae-action-group button,
-            #trae-panel[data-size="medium"] .trae-action-group button {
+            #trae-panel[data-size="compact"] .trae-action-group button {
                 flex: 0 0 auto;
                 min-width: 70px;
                 max-width: 120px;
                 width: auto;
             }
 
-            #trae-panel[data-size="compact"] .trae-config-grid,
-            #trae-panel[data-size="medium"] .trae-config-grid {
+            #trae-panel[data-size="compact"] .trae-config-grid {
                 width: 100%;
                 grid-template-columns: repeat(2, 1fr);
                 gap: 6px 8px;
             }
 
-            #trae-panel[data-size="compact"] .trae-config-row,
-            #trae-panel[data-size="medium"] .trae-config-row {
+            #trae-panel[data-size="compact"] .trae-config-row {
                 padding: 2px 4px;
                 min-height: 22px;
             }
@@ -2273,7 +2300,7 @@
             /* 配置网格布局 */
             .trae-config-grid {
                 display: grid;
-                grid-template-columns: repeat(4, 1fr);
+                grid-template-columns: repeat(2, 1fr);
                 column-gap: 8px;
                 row-gap: 8px;
                 align-items: stretch;
@@ -2287,7 +2314,7 @@
             .trae-config-row {
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
+                justify-content: flex-start;
                 gap: 6px;
                 font-size: 11px;
                 color: var(--text-secondary);
@@ -2677,7 +2704,7 @@
                 }
 
                 .trae-config-row {
-                    justify-content: space-between !important;
+                    justify-content: flex-start !important;
                     padding: 4px 8px !important;
                 }
             }

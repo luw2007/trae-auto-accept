@@ -5,6 +5,18 @@ All notable changes to the "Trae Auto Accept" extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.2] - 2025-10-31
+
+### 🔧 Changed
+- 面板宽度优化：中面板宽度从 400px 增加至 440px，改善空间利用
+- 布局改进：中大面板采用水平布局，按钮组和配置项并排显示
+- 配置网格调整：从 4 列改为 2 列，提升小屏幕适配性
+- 对齐方式优化：将 space-between 改为 flex-start，提高元素紧凑度
+
+### 🐛 Fixed
+- 修复中大面板的按钮和配置项布局不清晰问题
+- 修复小面板空间浪费问题
+
 ## [1.13.1] - 2024-09-24
 
 ### ✨ Added
